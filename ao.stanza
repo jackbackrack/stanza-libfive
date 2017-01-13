@@ -7,19 +7,13 @@ defpackage ao :
   import geom
   import font
 
-extern store_new: () -> ptr<?>
-extern store_delete: (ptr<?>) -> int
-extern token_x: (ptr<?>) -> ptr<?>
-extern token_y: (ptr<?>) -> ptr<?>
-extern token_z: (ptr<?>) -> ptr<?>
-extern token_const: (ptr<?>, float) -> ptr<?>
-extern token_unary: (ptr<?>, int, ptr<?>) -> ptr<?>
-extern token_binary: (ptr<?>, int, ptr<?>, ptr<?>) -> ptr<?>
-extern token_affine_vec: (ptr<?>, ptr<float>) -> int
-extern matrix_invert: (ptr<float>, ptr<float>, ptr<float>) -> int
-extern tree_eval_interval: (ptr<?>, ptr<float>, ptr<float>, ptr<float>) -> int
+extern tree_x: () -> ptr<?>
+extern tree_y: () -> ptr<?>
+extern tree_z: () -> ptr<?>
+extern tree_const: (float) -> ptr<?>
+extern tree_unary: (int, ptr<?>) -> ptr<?>
+extern tree_binary: (int, ptr<?>, ptr<?>) -> ptr<?>
 extern opcode_enum: (ptr<?>) -> int
-extern tree_new: (ptr<?>, ptr<?>) -> ptr<?>
 extern tree_export_slice: (ptr<?>, ptr<?>, float, float, float, float, float, float) -> int
 extern tree_export_mesh: (ptr<?>, ptr<?>, float, float, float, float, float, float, float) -> int
 ;; extern tree_render_mesh: (ptr<?>, ptr<ptr<float>>, float, float, float, float, float, float, float) -> int
@@ -40,25 +34,12 @@ public lostanza deftype Contours :
 
 public lostanza deftype Tree <: Geom :
   value: ptr<?>
-  points: ref<Tuple<V3f>>
-
-public lostanza defn points (t:ref<Tree>) -> ref<Tuple<V3f>> :
-  return t.points
 
 defmethod print (o:OutputStream, t:Tree) :
   print-all(o, ["Tree()"])
 
-public lostanza deftype Store :
-  value: ptr<?>
-
-lostanza deftype Node :
-  value: ptr<?>
-
-defmethod print (o:OutputStream, t:Node) :
-  print-all(o, ["Node()"])
-
 public defstruct FloField :
-  node: Node
+  tree: Tree
   op: String
   args: List
 
@@ -183,16 +164,6 @@ public defn Shape (s:Shape, bounds:Box, points:Tuple<V3f>) :
 public defn Shape (s:Shape, bounds:Box) :
   Shape(s, bounds, [])
 
-public lostanza defn new-store () -> ref<Store> :
-  return new Store{call-c store_new()}
-
-public lostanza defn del (s:ref<Store>) -> ref<False> :
-  call-c store_delete(s.value)
-  return false
-
-public lostanza defn new-tree (s:ref<Store>, r:ref<FloField>, points:ref<Tuple<V3f>>) -> ref<Tree> :
-  return new Tree{call-c tree_new(s.value, node(r).value), points}
-
 public lostanza defn tree-export-mesh (t:ref<Tree>, filename:ref<String>, box:ref<Box>, res:ref<Float>) -> ref<False> :
   call-c tree_export_mesh(t.value, addr!(filename.chars), x(lo(box)).value, x(hi(box)).value, y(lo(box)).value, y(hi(box)).value, z(lo(box)).value, z(hi(box)).value, res.value)
   return false
@@ -285,25 +256,22 @@ public lostanza defn ao-halt () -> ref<False> :
   call-c ao_halt()
   return false
 
-public var *store* = new-store()
-defn current-store () -> Store : *store*
-
 public lostanza defn fab-x () -> ref<FloField> :
-  return FloField(new Node{call-c token_x(current-store().value)}, String("X"), List())
+  return FloField(new Tree{call-c tree_x()}, String("X"), List())
 public lostanza defn fab-y () -> ref<FloField> :
-  return FloField(new Node{call-c token_y(current-store().value)}, String("Y"), List())
+  return FloField(new Tree{call-c tree_y()}, String("Y"), List())
 public lostanza defn fab-z () -> ref<FloField> :
-  return FloField(new Node{call-c token_z(current-store().value)}, String("Z"), List())
+  return FloField(new Tree{call-c tree_z()}, String("Z"), List())
 public lostanza defn lit (f:ref<Float>) -> ref<FloField> :
-  return FloField(new Node{call-c token_const(current-store().value, f.value)}, String("LIT"), List(f))
+  return FloField(new Tree{call-c tree_const(f.value)}, String("LIT"), List(f))
 public lostanza defn lit (f:ref<Double>) -> ref<FloField> :
   return lit(to-float(f))
 public lostanza defn opcode (name:ref<String>) -> ref<Int> :
   return new Int{call-c opcode_enum(addr!(name.chars))}
 public lostanza defn unary (op:ref<String>, t:ref<FloField>) -> ref<FloField> :
-  return FloField(new Node{call-c token_unary(current-store().value, opcode(op).value, node(t).value)}, op, List(t))
+  return FloField(new Tree{call-c tree_unary(opcode(op).value, tree(t).value)}, op, List(t))
 public lostanza defn binary (op:ref<String>, t1:ref<FloField>, t2:ref<FloField>) -> ref<FloField> :
-  return FloField(new Node{call-c token_binary(current-store().value, opcode(op).value, node(t1).value, node(t2).value)}, op, List(t1, t2))
+  return FloField(new Tree{call-c tree_binary(opcode(op).value, tree(t1).value, tree(t2).value)}, op, List(t1, t2))
 public defn min-lit () : lit(FLOAT-MIN)
 public defn max-lit () : lit(FLOAT-MAX)
 
@@ -858,12 +826,9 @@ public defn align-max-z<?T> (shapes:Seqable<?T&Poseable>) -> Seq<T> :
   align-it(shapes, { z(hi(_)) }, mov-z)
 
 defn jit-shape (s:Shape) -> Tree :
-  let-var *store* = new-store() :
-    val e = fab(s, Vec3Field(fab-x(), fab-y(), fab-z()))
-    ;; println-all(["E = " e])
-    val res = new-tree(*store*, e, points(s))
-    del(*store*)
-    res
+  val e = fab(s, Vec3Field(fab-x(), fab-y(), fab-z()))
+  ;; println-all(["E = " e])
+  tree(e)
 
 defn jit-layer (l:Layer) -> TreeLayer :
   TreeLayer(pos(l), color(l), jit-shape(shape(l)))
