@@ -38,13 +38,41 @@ public lostanza deftype Tree <: Geom :
 defmethod print (o:OutputStream, t:Tree) :
   print-all(o, ["Tree()"])
 
-public defstruct FloField :
-  tree: Tree
-  op: String
-  args: List
+public deftype FloField <: Equalable
+public defmulti tree (f:FloField) -> Tree
+public defmulti count (f:FloField) -> Int
 
-defmethod print (s:OutputStream, f:FloField) :
+public defstruct FloFieldLit <: FloField :
+  tree: Tree with: (as-method => true)
+  value: Float
+
+defn lit? (f:FloField, v:Float) -> True|False :
+  match(f):
+  (l:FloFieldLit) : value(l) == v
+  (o:FloFieldOp) : false
+
+defmethod print (s:OutputStream, f:FloFieldLit) :
+  print(s, "LIT(%_)" % [value(f)])
+
+defmethod equal? (a:FloFieldLit, b:FloFieldLit) -> True|False :
+  value(a) == value(b)
+
+defmethod count (a:FloFieldLit) -> Int :
+  1
+
+public defstruct FloFieldOp <: FloField :
+  tree: Tree with: (as-method => true)
+  op: String
+  args: List<FloField>
+
+defmethod print (s:OutputStream, f:FloFieldOp) :
   print(s, "%_(%,)" % [op(f), args(f)])
+
+defmethod equal? (a:FloFieldOp, b:FloFieldOp) -> True|False :
+  op(a) == op(b) and all?(equal?, args(a), args(b))
+
+defmethod count (f:FloFieldOp) -> Int :
+  1 + reduce(plus, 0, seq(count, args(f)))
 
 public deftype Poseable <: Geom
 public defmulti bounds (p:Poseable) -> Box
@@ -126,12 +154,15 @@ public defstruct TreeLayout <: Geom :
 
 public deftype Shape <: Poseable
 public defmulti fabber (s:Shape) -> ((Vec3Field) -> FloField)
+public defmulti cache (s:Shape) -> HashTable<Vec3Field,FloField>
 
 public defn Shape (fabber:(Vec3Field) -> FloField, bounds:Box, points:Tuple<V3f>) :
+  val cache = HashTable<Vec3Field,FloField>()
   new Shape :
     defmethod fabber (this) : fabber
     defmethod bounds (this) : bounds
     defmethod points (this) : points
+    defmethod cache (this) : cache
 
 public defn Shape (fabber:(Vec3Field) -> FloField, bounds:Box) :
   Shape(fabber, bounds, [])
@@ -156,7 +187,14 @@ defmethod print (s:OutputStream, o:Shape) :
   print-all(s, ["Shape(" bounds(o) ")"])
 
 defn fab (s:Shape, p:Vec3Field) -> FloField :
-  fabber(s)(p)
+  if key?(cache(s), p) :
+    cache(s)[p]
+  else :
+    val f = fabber(s)(p)
+    cache(s)[p] = f
+    ;; if length(cache(s)) > 1 :
+    ;;   println-all(["MISS " to-tuple $ keys(cache(s))])
+    f
 
 public defn Shape (s:Shape, bounds:Box, points:Tuple<V3f>) :
   Shape(fabber(s), bounds)
@@ -257,32 +295,38 @@ public lostanza defn ao-halt () -> ref<False> :
   return false
 
 public lostanza defn fab-x () -> ref<FloField> :
-  return FloField(new Tree{call-c tree_x()}, String("X"), List())
+  return FloFieldOp(new Tree{call-c tree_x()}, String("X"), List())
 public lostanza defn fab-y () -> ref<FloField> :
-  return FloField(new Tree{call-c tree_y()}, String("Y"), List())
+  return FloFieldOp(new Tree{call-c tree_y()}, String("Y"), List())
 public lostanza defn fab-z () -> ref<FloField> :
-  return FloField(new Tree{call-c tree_z()}, String("Z"), List())
+  return FloFieldOp(new Tree{call-c tree_z()}, String("Z"), List())
 public lostanza defn lit (f:ref<Float>) -> ref<FloField> :
-  return FloField(new Tree{call-c tree_const(f.value)}, String("LIT"), List(f))
+  return FloFieldLit(new Tree{call-c tree_const(f.value)}, f)
 public lostanza defn lit (f:ref<Double>) -> ref<FloField> :
   return lit(to-float(f))
 public lostanza defn opcode (name:ref<String>) -> ref<Int> :
   return new Int{call-c opcode_enum(addr!(name.chars))}
 public lostanza defn unary (op:ref<String>, t:ref<FloField>) -> ref<FloField> :
-  return FloField(new Tree{call-c tree_unary(opcode(op).value, tree(t).value)}, op, List(t))
+  return FloFieldOp(new Tree{call-c tree_unary(opcode(op).value, tree(t).value)}, op, List(t))
 public lostanza defn binary (op:ref<String>, t1:ref<FloField>, t2:ref<FloField>) -> ref<FloField> :
-  return FloField(new Tree{call-c tree_binary(opcode(op).value, tree(t1).value, tree(t2).value)}, op, List(t1, t2))
+  return FloFieldOp(new Tree{call-c tree_binary(opcode(op).value, tree(t1).value, tree(t2).value)}, op, List(t1, t2))
 public defn min-lit () : lit(FLOAT-MIN)
 public defn max-lit () : lit(FLOAT-MAX)
 
 public defn modulo (x:FloField, y:FloField) -> FloField : binary("mod", x, y)
-public defn times (x:FloField, y:FloField) -> FloField : binary("mul", x, y)
+public defn times (x:FloField, y:FloField) -> FloField : 
+  if lit?(x, 1.0f): y else if lit?(y, 1.0f): x else : binary("mul", x, y)
 public defn nan-fill (x:FloField, y:FloField) -> FloField : binary("nan-fill", x, y)
-public defn min (x:FloField, y:FloField) -> FloField : binary("min", x, y)
-public defn max (x:FloField, y:FloField) -> FloField : binary("max", x, y)
-public defn divide (x:FloField, y:FloField) -> FloField : binary("div", x, y)
-public defn plus (x:FloField, y:FloField) -> FloField : binary("add", x, y)
-public defn minus (x:FloField, y:FloField) -> FloField : binary("sub", x, y)
+public defn min (x:FloField, y:FloField) -> FloField : 
+  if lit?(y, FLOAT-MAX): x else if lit?(x, FLOAT-MAX): y else : binary("min", x, y)
+public defn max (x:FloField, y:FloField) -> FloField :
+  if lit?(y, FLOAT-MIN): x else if lit?(x, FLOAT-MIN): y else : binary("max", x, y)
+public defn divide (x:FloField, y:FloField) -> FloField : 
+  if lit?(y, 1.0f): x else : binary("div", x, y)
+public defn plus (x:FloField, y:FloField) -> FloField :
+  if lit?(x, 0.0f): y else if lit?(y, 0.0f): x else : binary("add", x, y)
+public defn minus (x:FloField, y:FloField) -> FloField : 
+  if lit?(y, 0.0f): x else : binary("sub", x, y)
 public defn atan2 (x:FloField, y:FloField) -> FloField : binary("atan2", x, y)
 public defn sqrt (x:FloField) -> FloField : unary("sqrt", x)
 public defn sqr (x:FloField) -> FloField : unary("square", x)
@@ -298,18 +342,29 @@ public defn negate (x:FloField) -> FloField : unary("neg", x)
 public defn clamp (n:FloField, mn:FloField, mx:FloField) -> FloField :
   min(mx, max(mn, n))
 
-public val pi = 3.1414
-
-public deftype Vec3Field
+public deftype Vec3Field <: Hashable & Equalable
 public defmulti x (v:Vec3Field) -> FloField
 public defmulti y (v:Vec3Field) -> FloField
 public defmulti z (v:Vec3Field) -> FloField
+public defmulti id (v:Vec3Field) -> Int
+
+var nxt-id = -1
+
+defn new-id () :
+  nxt-id = nxt-id + 1
+  nxt-id
 
 public defn Vec3Field (x:FloField, y:FloField, z:FloField) :
+  val id = new-id()
   new Vec3Field :
     defmethod x (this) : x
     defmethod y (this) : y
     defmethod z (this) : z
+    defmethod id (this) : id
+    defmethod hash (this) : id
+
+defmethod equal? (a:Vec3Field, b:Vec3Field) -> True|False :
+  x(a) == x(b) and y(a) == y(b) and z(a) == z(b) 
 
 public defn lit (v:V3f) -> Vec3Field :
   Vec3Field(lit(x(v)), lit(y(v)), lit(z(v)))
@@ -403,10 +458,10 @@ public defmethod mov (dp:V3f, s:Shape) -> Shape :
 ;;   mov(dx, dy, lit(0.0), f)
 
 public defn degrees-to-radians (d:Float) -> Float :
-  d * 180.0f / to-float(pi)
+  d * 180.0f / to-float(PI-F)
 
 public defn radians-to-degrees (a:Float) -> Float :
-  a * to-float(pi) / 180.0f
+  a * to-float(PI-F) / 180.0f
 
 public defn rot-x (d:Float, s:Shape) -> Shape :
   val a = degrees-to-radians(d)
@@ -624,6 +679,9 @@ public defn cube (d:Float) -> Shape :
 public defn cube (xy:Float, z:Float) -> Shape :
   cube(xy, xy, z)
 
+public defn cube (v:V3f) -> Shape :
+  cube(x(v), y(v), z(v))
+
 public defn box (dims:V3f) -> Shape :
   defn fab (p) :
     val d = abs(p) - lit(0.5f * dims)
@@ -702,25 +760,27 @@ public defn spacer-x (gdim:Float) : spacer-x(gdim, empty())
 public defn spacer-y (gdim:Float) : spacer-y(gdim, empty())
 public defn spacer-z (gdim:Float) : spacer-z(gdim, empty())
 
-defn stack-it<?T> (ishapes:Seqable<?T&Poseable>, dim:(V3f) -> Float, mov:(Float, T) -> T, dir:Float) -> Seq<T> :
+defn stack-idx<?T> (ishapes:Seqable<?T&Poseable>, idx:Int, dir:Float) -> Seq<T> :
   val shapes = to-tuple(ishapes)
-  val tot = reduce(plus, for shape in shapes seq : dim(dims(bounds(shape))))
+  val tot = reduce(plus, for shape in shapes seq : dims(bounds(shape))[idx])
   var tot-fac = 0.0f
   generate<T> :
     for (child in shapes, i in 0 to false) do :
-      val now-fac = dim(dims(bounds(child))) / tot
-      val ctr     = dim(center(bounds(child)))
-      yield(mov(dir * (tot / 2.0f - (tot-fac + now-fac / 2.0f) * tot) - ctr, child))
+      val now-fac = dims(bounds(child))[idx] / tot
+      val ctr     = center(bounds(child))[idx]
+      val amount  = dir * (tot / 2.0f - (tot-fac + now-fac / 2.0f) * tot) - ctr
+      val del     = amount * V3f-unit(idx)
+      yield(mov(del, child))
       tot-fac = tot-fac + now-fac
 
 public defn stack-x<?T> (shapes:Seqable<?T&Poseable>) -> Seq<T> :
-  stack-it(shapes, x, mov-x, -1.0f)
+  stack-idx(shapes, 0, -1.0f)
 
 public defn stack-y<?T> (shapes:Seqable<?T&Poseable>) -> Seq<T> :
-  stack-it(shapes, y, mov-y,  1.0f)
+  stack-idx(shapes, 1,  1.0f)
 
 public defn stack-z<?T> (shapes:Seqable<?T&Poseable>) -> Seq<T> :
-  stack-it(shapes, z, mov-z,  1.0f)
+  stack-idx(shapes, 2,  1.0f)
 
 public deftype AnyGlue <: Poseable
 public defmulti amount (g:AnyGlue) -> Float
@@ -775,24 +835,27 @@ public defn glue<?T> (shapes:Seqable<?T&Poseable>) -> Seq<T> :
       if i != 0: yield(glue-of(shape, 1.0f))
       yield(shape)
 
-defn assign-glue<?T> (ishapes:Seqable<?T&Poseable>, target:Float, spacer:(Float, T) -> T, dim:(V3f) -> Float) -> Seq<T> :
+defn assign-glue-idx<?T> (ishapes:Seqable<?T&Poseable>, target:Float, idx:Int) -> Seq<T> :
   val shapes = to-tuple(ishapes)
-  val tot = reduce(plus, for shape in shapes seq : dim(dims(bounds(shape))))
+  val tot = reduce(plus, for shape in shapes seq : dims(bounds(shape))[idx])
   val glue-tot = reduce(plus, for shape in shapes seq : glue-amount(shape))
   val gap-tot = (target - tot)
   for shape in shapes seq :
     match(shape) :
-      (g:AnyGlue&T) : spacer((amount(g) / glue-tot) * gap-tot, g)
+      (g:AnyGlue&T) : spacer(shape, (amount(g) / glue-tot) * gap-tot * V3f-unit(idx))
       (s)           : s
 
+public defn stack-idx<?T> (d:Float, idx:Int, shapes:Seqable<?T&Poseable>) -> Seq<T> :
+  stack-idx(assign-glue-idx(shapes, d, idx), idx, 1.0f)
+
 public defn stack-x<?T> (w:Float, shapes:Seqable<?T&Poseable>) -> Seq<T> :
-  stack-x(assign-glue(shapes, w, spacer-x, x))
+  stack-x(assign-glue-idx(shapes, w, 0))
 
 public defn stack-y<?T> (h:Float, shapes:Seqable<?T&Poseable>) -> Seq<T> :
-  stack-y(assign-glue(shapes, h, spacer-y, y))
+  stack-y(assign-glue-idx(shapes, h, 1))
 
 public defn stack-z<?T> (d:Float, shapes:Seqable<?T&Poseable>) -> Seq<T> :
-  stack-z(assign-glue(shapes, d, spacer-z, z))
+  stack-z(assign-glue-idx(shapes, d, 2))
 
 defn align-it<?T> (ishapes:Seqable<?T&Poseable>, value:(Box) -> Float, mov:(Float, T) -> T) -> Seq<T> :
   val shapes = to-tuple(ishapes)
@@ -826,8 +889,10 @@ public defn align-max-z<?T> (shapes:Seqable<?T&Poseable>) -> Seq<T> :
   align-it(shapes, { z(hi(_)) }, mov-z)
 
 defn jit-shape (s:Shape) -> Tree :
+  println-all(["F"])
   val e = fab(s, Vec3Field(fab-x(), fab-y(), fab-z()))
   ;; println-all(["E = " e])
+  println-all(["E "])
   tree(e)
 
 defn jit-layer (l:Layer) -> TreeLayer :
@@ -858,3 +923,35 @@ public defn save (z:Float, filename:String, s:Shape) -> False :
 public defn save (filename:String, s:Shape) -> False :
   val tree = jit(s) as Tree
   tree-export-mesh(tree, filename, Box(V3f(-5.0f, -5.0f, -5.0f), V3f(5.0f, 5.0f, 5.0f)), 50.0f)
+
+;;;
+
+val big = 1.0e6f
+
+public defn join-pieces (a:Shape, b:Shape, num:Int) -> [Shape, Shape] :
+  val s = intersection $ [a, b]
+  val bb = bounds(s)
+  if empty?(bb) :
+    [a, b]
+  else :
+    val dims  = dims(bb)
+    val idx   = max-idx(dims)
+    val dim   = to-float(num * 2 - 1)
+    val tdims = set-elt(V3f-fill(big), idx, dims[idx] / dim)
+    val tooth = cube(tdims) & s
+    val teeth = union $ stack-idx(dims[idx], idx, glue $ seq({ tooth }, 0 to num))
+    val aj    = s & teeth
+    val pa    = rem(a, aj)
+    val pb    = rem(b, pa)
+    [pa, pb]
+
+public defn join-pieces (elts:Seqable<Shape>, num:Int) :
+  val pieces = to-array<Shape> $ elts
+  for i in 0 to length(pieces) do :
+    for j in (i + 1) to length(pieces) do :
+      if not empty?(bounds(pieces[i]) & bounds(pieces[j])) :
+        println-all(["JOIN " i "," j])
+        val [ni, nj] = join-pieces(pieces[i], pieces[j], num)
+        pieces[i] = ni
+        pieces[j] = nj
+  pieces
