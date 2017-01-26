@@ -50,6 +50,7 @@ public defn geom-eval-top-env () :
   add-binding(top-env, `Box, Box)
   add-binding(top-env, `lo, lo)
   add-binding(top-env, `hi, hi)
+  add-binding(top-env, `center, center)
   add-binding(top-env, `dims, dims)
   add-binding(top-env, `empty?, empty?)
   add-binding(top-env, `union, union)

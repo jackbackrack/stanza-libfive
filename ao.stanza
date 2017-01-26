@@ -46,10 +46,20 @@ public defstruct FloFieldLit <: FloField :
   tree: Tree with: (as-method => true)
   value: Float
 
+defn lit? (f:FloField) -> True|False :
+  match(f):
+  (l:FloFieldLit) : true
+  (o:FloFieldOp) : false
+
 defn lit? (f:FloField, v:Float) -> True|False :
   match(f):
   (l:FloFieldLit) : value(l) == v
   (o:FloFieldOp) : false
+
+defn lit-value (f:FloField) -> Float :
+  match(f):
+  (l:FloFieldLit) : value(l)
+  (o:FloFieldOp) : 0.0f
 
 defmethod print (s:OutputStream, f:FloFieldLit) :
   print(s, "LIT(%_)" % [value(f)])
@@ -313,31 +323,50 @@ public lostanza defn binary (op:ref<String>, t1:ref<FloField>, t2:ref<FloField>)
 public defn min-lit () : lit(FLOAT-MIN)
 public defn max-lit () : lit(FLOAT-MAX)
 
-public defn modulo (x:FloField, y:FloField) -> FloField : binary("mod", x, y)
-public defn times (x:FloField, y:FloField) -> FloField : 
-  if lit?(x, 1.0f): y else if lit?(y, 1.0f): x else : binary("mul", x, y)
 public defn nan-fill (x:FloField, y:FloField) -> FloField : binary("nan-fill", x, y)
+public defn modulo (x:FloField, y:FloField) -> FloField :
+  if lit?(x) and lit?(y): lit(modulo(lit-value(x), lit-value(y))) else : binary("mod", x, y)
+public defn times (x:FloField, y:FloField) -> FloField : 
+  if lit?(x) and lit?(y): lit(times(lit-value(x), lit-value(y)))
+  else if lit?(x, 1.0f): y else if lit?(y, 1.0f): x else : binary("mul", x, y)
 public defn min (x:FloField, y:FloField) -> FloField : 
-  if lit?(y, FLOAT-MAX): x else if lit?(x, FLOAT-MAX): y else : binary("min", x, y)
+  if lit?(x) and lit?(y): lit(min(lit-value(x), lit-value(y)))
+  else if lit?(y, FLOAT-MAX): x else if lit?(x, FLOAT-MAX): y else : binary("min", x, y)
 public defn max (x:FloField, y:FloField) -> FloField :
-  if lit?(y, FLOAT-MIN): x else if lit?(x, FLOAT-MIN): y else : binary("max", x, y)
+  if lit?(x) and lit?(y): lit(max(lit-value(x), lit-value(y)))
+  else if lit?(y, FLOAT-MIN): x else if lit?(x, FLOAT-MIN): y else : binary("max", x, y)
 public defn divide (x:FloField, y:FloField) -> FloField : 
-  if lit?(y, 1.0f): x else : binary("div", x, y)
+  if lit?(x) and lit?(y): lit(divide(lit-value(x), lit-value(y)))
+  else if lit?(y, 1.0f): x else : binary("div", x, y)
 public defn plus (x:FloField, y:FloField) -> FloField :
-  if lit?(x, 0.0f): y else if lit?(y, 0.0f): x else : binary("add", x, y)
+  if lit?(x) and lit?(y): lit(plus(lit-value(x), lit-value(y)))
+  else if lit?(x, 0.0f): y else if lit?(y, 0.0f): x else : binary("add", x, y)
 public defn minus (x:FloField, y:FloField) -> FloField : 
-  if lit?(y, 0.0f): x else : binary("sub", x, y)
-public defn atan2 (x:FloField, y:FloField) -> FloField : binary("atan2", x, y)
-public defn sqrt (x:FloField) -> FloField : unary("sqrt", x)
-public defn sqr (x:FloField) -> FloField : unary("square", x)
-public defn abs (x:FloField) -> FloField : unary("abs", x)
-public defn sin (x:FloField) -> FloField : unary("sin", x)
-public defn cos (x:FloField) -> FloField : unary("cos", x)
-public defn tan (x:FloField) -> FloField : unary("tan", x)
-public defn asin (x:FloField) -> FloField : unary("asin", x)
-public defn acos (x:FloField) -> FloField : unary("acos", x)
-public defn exp (x:FloField) -> FloField : unary("exp", x)
-public defn negate (x:FloField) -> FloField : unary("neg", x)
+  if lit?(x) and lit?(y): lit(minus(lit-value(x), lit-value(y)))
+  else if lit?(y, 0.0f): x else : binary("sub", x, y)
+public defn atan2 (x:FloField, y:FloField) -> FloField :
+  if lit?(x) and lit?(y): lit(atan2(lit-value(x), lit-value(y)))
+  else if lit?(x) and lit?(y): lit(atan2(lit-value(x), lit-value(y))) else: binary("atan2", x, y)
+public defn sqrt (x:FloField) -> FloField :
+  if lit?(x): lit(sqrt(lit-value(x))) else: unary("sqrt", x)
+public defn sqr (x:FloField) -> FloField :
+  if lit?(x): lit(lit-value(x) * lit-value(x)) else: unary("square", x)
+public defn abs (x:FloField) -> FloField :
+  if lit?(x): lit(abs(lit-value(x))) else: unary("abs", x)
+public defn sin (x:FloField) -> FloField : 
+  if lit?(x): lit(sin(lit-value(x))) else: unary("sin", x)
+public defn cos (x:FloField) -> FloField : 
+  if lit?(x): lit(cos(lit-value(x))) else: unary("cos", x)
+public defn tan (x:FloField) -> FloField : 
+  if lit?(x): lit(tan(lit-value(x))) else: unary("tan", x)
+public defn asin (x:FloField) -> FloField : 
+  if lit?(x): lit(asin(lit-value(x))) else: unary("asin", x)
+public defn acos (x:FloField) -> FloField : 
+  if lit?(x): lit(acos(lit-value(x))) else: unary("acos", x)
+public defn exp (x:FloField) -> FloField : 
+  if lit?(x): lit(exp(lit-value(x))) else: unary("exp", x)
+public defn negate (x:FloField) -> FloField : 
+  if lit?(x): lit(negate(lit-value(x))) else: unary("neg", x)
 
 public defn clamp (n:FloField, mn:FloField, mx:FloField) -> FloField :
   min(mx, max(mn, n))
@@ -929,28 +958,24 @@ public defn save (filename:String, s:Shape) -> False :
 val big = 1.0e6f
 
 public defn join-pieces (a:Shape, b:Shape, num:Int) -> [Shape, Shape] :
-  val s = intersection $ [a, b]
-  val bb = bounds(s)
-  if empty?(bb) :
-    [a, b]
-  else :
-    val dims  = dims(bb)
-    val idx   = max-idx(dims)
-    val dim   = to-float(num * 2 - 1)
-    val tdims = set-elt(V3f-fill(big), idx, dims[idx] / dim)
-    val tooth = cube(tdims) & s
-    val teeth = union $ stack-idx(dims[idx], idx, glue $ seq({ tooth }, 0 to num))
-    val aj    = s & teeth
-    val pa    = rem(a, aj)
-    val pb    = rem(b, pa)
-    [pa, pb]
+  val s     = intersection $ [a, b]
+  val bb    = bounds(s)
+  val dims  = dims(bb)
+  val idx   = max-idx(dims)
+  val dim   = to-float(num * 2 - 1)
+  val tdims = set-elt(V3f-fill(big), idx, dims[idx] / dim)
+  val tooth = cube(tdims)
+  val teeth = union $ stack-idx(dims[idx], idx, glue $ seq({ tooth }, 0 to num))
+  val aj    = s & teeth
+  val pa    = rem(a, aj)
+  val pb    = rem(b, pa)
+  [pa, pb]
 
 public defn join-pieces (elts:Seqable<Shape>, num:Int) :
   val pieces = to-array<Shape> $ elts
   for i in 0 to length(pieces) do :
     for j in (i + 1) to length(pieces) do :
       if not empty?(bounds(pieces[i]) & bounds(pieces[j])) :
-        println-all(["JOIN " i "," j])
         val [ni, nj] = join-pieces(pieces[i], pieces[j], num)
         pieces[i] = ni
         pieces[j] = nj
