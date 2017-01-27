@@ -793,14 +793,16 @@ defn stack-idx<?T> (ishapes:Seqable<?T&Poseable>, idx:Int, dir:Float) -> Seq<T> 
   val shapes = to-tuple(ishapes)
   val tot = reduce(plus, for shape in shapes seq : dims(bounds(shape))[idx])
   var tot-fac = 0.0f
-  generate<T> :
-    for (child in shapes, i in 0 to false) do :
-      val now-fac = dims(bounds(child))[idx] / tot
-      val ctr     = center(bounds(child))[idx]
-      val amount  = dir * (tot / 2.0f - (tot-fac + now-fac / 2.0f) * tot) - ctr
-      val del     = amount * V3f-unit(idx)
-      yield(mov(del, child))
-      tot-fac = tot-fac + now-fac
+  val res =
+    generate<T&Poseable> :
+      for (child in shapes, i in 0 to false) do :
+        val now-fac = dims(bounds(child))[idx] / tot
+        val ctr     = center(bounds(child))[idx]
+        val amount  = dir * (tot / 2.0f - (tot-fac + now-fac / 2.0f) * tot) - ctr
+        val del     = amount * V3f-unit(idx)
+        yield(mov(del, child))
+        tot-fac = tot-fac + now-fac
+  filter({ volume(dims(bounds(_))) > 0.0f }, res)
 
 public defn stack-x<?T> (shapes:Seqable<?T&Poseable>) -> Seq<T> :
   stack-idx(shapes, 0, -1.0f)
@@ -958,17 +960,15 @@ public defn save (filename:String, s:Shape) -> False :
 val big = 1.0e6f
 
 public defn join-pieces (a:Shape, b:Shape, num:Int) -> [Shape, Shape] :
-  val s     = intersection $ [a, b]
-  val bb    = bounds(s)
-  val dims  = dims(bb)
-  val idx   = max-idx(dims)
-  val dim   = to-float(num * 2 - 1)
-  val tdims = set-elt(V3f-fill(big), idx, dims[idx] / dim)
-  val tooth = cube(tdims)
-  val teeth = union $ stack-idx(dims[idx], idx, glue $ seq({ tooth }, 0 to num))
-  val aj    = s & teeth
-  val pa    = rem(a, aj)
-  val pb    = rem(b, pa)
+  val overlap = intersection $ [a, b]
+  val dims    = dims(bounds(overlap))
+  val idx     = max-idx(dims)
+  val tdims   = set-elt(V3f-fill(big), idx, dims[idx] / to-float(num * 2 - 1))
+  val tooth   = cube(tdims)
+  val tooths  = union $ stack-idx(dims[idx], idx, glue $ seq({ tooth }, 0 to num))
+  val teeth   = overlap & tooths
+  val pa      = rem(a, teeth)
+  val pb      = rem(b, pa)
   [pa, pb]
 
 public defn join-pieces (elts:Seqable<Shape>, num:Int) :
@@ -980,3 +980,12 @@ public defn join-pieces (elts:Seqable<Shape>, num:Int) :
         pieces[i] = ni
         pieces[j] = nj
   pieces
+
+;; TODO: LIMITED TO AXIS ALIGNED SHAPES
+public defn smash (s:Shape) -> Shape :
+  val bb    = bounds(s)
+  val dims  = dims(bb)
+  val idx   = min-idx(dims)
+  val ctr   = center(bb)
+  defn rot (s) : if idx == 0 : reflect-xz(s) else if idx == 1 : reflect-yz(s) else : s
+  rot(mov((- ctr), s))
