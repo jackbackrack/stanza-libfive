@@ -989,3 +989,13 @@ public defn smash (s:Shape) -> Shape :
   val ctr   = center(bb)
   defn rot (s) : if idx == 0 : reflect-xz(s) else if idx == 1 : reflect-yz(s) else : s
   rot(mov((- ctr), s))
+
+public defn smash (pcs:Seqable<Shape>, space:Float) -> Seqable<Shape> :
+  val spcs = to-tuple $ seq(smash, pcs)
+  val width = reduce(plus, seq({ x(dims(bounds(_))) }, spcs))
+  var off = -0.5f * (width + to-float(length(spcs) - 1) * space)
+  for pc in spcs seq :
+    val res = mov-x(off, pc)
+    off = off + x(dims(bounds(pc))) + space
+    res
+
