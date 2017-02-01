@@ -88,6 +88,7 @@ public deftype Poseable <: Geom
 public defmulti bounds (p:Poseable) -> Box
 public defmulti points (p:Poseable) -> Tuple<V3f>
 public defmulti mov<?T> (dp:V3f, p:?T&Poseable) -> T
+public defmulti shapes (p:Poseable) -> Seqable<Shape>
 
 public defn mov-x<?T> (dx:Float, p:?T&Poseable) -> T : mov(V3f(dx, 0.0f, 0.0f), p)
 public defn mov-y<?T> (dy:Float, p:?T&Poseable) -> T : mov(V3f(0.0f, dy, 0.0f), p)
@@ -118,6 +119,8 @@ public defn Layer (color:V4f, shape:Shape) :
 public defmethod mov (dp:V3f, p:Layer) -> Layer :
   Layer(mov-mat44(dp) * bounds(p), pos(p) + dp, color(p), shape(p))
 
+public defmethod shapes (p:Layer) : [ shape(p) ]
+
 public deftype Layoutable <: RealPoseable
 public defmulti blocks (l:Layoutable) -> Seqable<Block>
 
@@ -132,9 +135,12 @@ public defn Block (layers:Collection<Layer>) :
 
 public defn Block (layers:Seq<Layer>) : Block(to-tuple $ layers)
 public defn Block (color:V4f, shape:Shape) : Block([Layer(color, shape)])
+public defn Block (shape:Shape) : Block(WHITE, shape)
 
 public defmethod mov (dp:V3f, b:Block) -> Block :
   Block(to-tuple $ seq(mov{dp, _}, layers(b)))
+
+public defmethod shapes (p:Block) : cat-all(seq(shapes, layers(p)))
 
 public deftype Layout <: Layoutable
 
@@ -148,6 +154,8 @@ public defn Layout (blocks:Seq<Layoutable>) : Layout(to-tuple $ blocks)
 
 public defmethod mov (dp:V3f, l:Layout) -> Layout :
   Layout(to-tuple $ seq(mov{dp, _}, blocks(l)))
+
+public defmethod shapes (p:Layout) : cat-all(seq(shapes, blocks(p)))
 
 public defstruct TreeLayer <: Geom :
   pos : V3f
@@ -789,7 +797,7 @@ public defn spacer-x (gdim:Float) : spacer-x(gdim, empty())
 public defn spacer-y (gdim:Float) : spacer-y(gdim, empty())
 public defn spacer-z (gdim:Float) : spacer-z(gdim, empty())
 
-defn stack-idx<?T> (ishapes:Seqable<?T&Poseable>, idx:Int, dir:Float) -> Seq<T> :
+public defn stack-idx<?T> (ishapes:Seqable<?T&Poseable>, idx:Int, dir:Float) -> Seq<T> :
   val shapes = to-tuple(ishapes)
   val tot = reduce(plus, for shape in shapes seq : dims(bounds(shape))[idx])
   var tot-fac = 0.0f
@@ -854,19 +862,28 @@ public defn LayoutGlue (glue:Glue) :
   new LayoutGlue :
     defmethod glue (this) : glue
 
-defmulti glue-of<?T> (s:?T&Poseable, a:Float) -> T
+public defmulti glue-of<?T> (s:?T&Poseable, a:Float) -> T
 defmethod glue-of (s:Shape, a:Float) -> Shape : Glue(1.0f)
 defmethod glue-of (s:Layer, a:Float) -> Layer : LayerGlue(Glue(1.0f))
 defmethod glue-of (s:Block, a:Float) -> Block : BlockGlue(Glue(1.0f))
 defmethod glue-of (s:Layout, a:Float) -> Layout : LayoutGlue(Glue(1.0f))
 
-public defn glue<?T> (shapes:Seqable<?T&Poseable>) -> Seq<T> :
+defn glue-when<?T> (zero?:True|False, shapes:Seqable<?T&Poseable>) -> Seq<T> :
   generate<T> :
     for (shape in shapes, i in 0 to false) do :
-      if i != 0: yield(glue-of(shape, 1.0f))
+      if zero? or i != 0: yield(glue-of(shape, 1.0f))
       yield(shape)
 
-defn assign-glue-idx<?T> (ishapes:Seqable<?T&Poseable>, target:Float, idx:Int) -> Seq<T> :
+public defn glue-even<?T> (shapes:Seqable<?T&Poseable>) -> Seq<T> :
+  glue-when(true, shapes)
+
+public defn glue-odd<?T> (shapes:Seqable<?T&Poseable>) -> Seq<T> :
+  glue-when(false, shapes)
+
+public defn glue<?T> (shapes:Seqable<?T&Poseable>) -> Seq<T> :
+  glue-odd(shapes)
+
+public defn assign-glue-idx<?T> (ishapes:Seqable<?T&Poseable>, target:Float, idx:Int) -> Seq<T> :
   val shapes = to-tuple(ishapes)
   val tot = reduce(plus, for shape in shapes seq : dims(bounds(shape))[idx])
   val glue-tot = reduce(plus, for shape in shapes seq : glue-amount(shape))
@@ -920,10 +937,8 @@ public defn align-max-z<?T> (shapes:Seqable<?T&Poseable>) -> Seq<T> :
   align-it(shapes, { z(hi(_)) }, mov-z)
 
 defn jit-shape (s:Shape) -> Tree :
-  println-all(["F"])
   val e = fab(s, Vec3Field(fab-x(), fab-y(), fab-z()))
   ;; println-all(["E = " e])
-  println-all(["E "])
   tree(e)
 
 defn jit-layer (l:Layer) -> TreeLayer :
@@ -963,9 +978,10 @@ public defn join-pieces (a:Shape, b:Shape, num:Int) -> [Shape, Shape] :
   val overlap = intersection $ [a, b]
   val dims    = dims(bounds(overlap))
   val idx     = max-idx(dims)
-  val tdims   = set-elt(V3f-fill(big), idx, dims[idx] / to-float(num * 2 - 1))
+  val nslots  = if num == 1: 2 else: num * 2 - 1
+  val tdims   = set-elt(V3f-fill(big), idx, dims[idx] / to-float(nslots))
   val tooth   = cube(tdims)
-  val tooths  = union $ stack-idx(dims[idx], idx, glue $ seq({ tooth }, 0 to num))
+  val tooths  = union $ stack-idx(dims[idx], idx, glue-when(nslots == 2, seq({ tooth }, 0 to num)))
   val teeth   = overlap & tooths
   val pa      = rem(a, teeth)
   val pb      = rem(b, pa)
@@ -990,12 +1006,20 @@ public defn smash (s:Shape) -> Shape :
   defn rot (s) : if idx == 0 : reflect-xz(s) else if idx == 1 : reflect-yz(s) else : s
   rot(mov((- ctr), s))
 
-public defn smash (pcs:Seqable<Shape>, space:Float) -> Seqable<Shape> :
-  val spcs = to-tuple $ seq(smash, pcs)
-  val width = reduce(plus, seq({ x(dims(bounds(_))) }, spcs))
-  var off = -0.5f * (width + to-float(length(spcs) - 1) * space)
-  for pc in spcs seq :
-    val res = mov-x(off, pc)
-    off = off + x(dims(bounds(pc))) + space
-    res
+public defn nest (pcs:Seqable<Shape>, width:Float, space:Float) -> Layout :
+  val spcs = lazy-qsort({ area(dims(bounds(_))) }, pcs)
+  ;; val lay  = stack-x(seq(Block, join(spcs, spacer-x(space))))
+  ;; cat-all(seq(shapes, lay))
+  val row  = Vector<Shape>()
+  val rows = generate<Tuple<Shape>> :
+    for pc in spcs do :
+      val off = reduce(plus, 0.0f, join(seq({ x(dims(bounds(_))) }, row), space))
+      if off > width :
+        yield(to-tuple $ row)
+        clear(row)
+      add(row, pc)
+    if length(row) > 0 : yield(to-tuple $ row)
+  val lay = stack-y(join(for row in rows seq: Layout(stack-x(seq(Block, join(row, spacer-x(space))))),
+                    Layout([ Block(spacer-y(space)) ])))
+  Layout(cat-all(seq(blocks, lay)))
 
