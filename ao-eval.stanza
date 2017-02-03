@@ -11,9 +11,9 @@ defpackage ao-eval :
 
 ;;; TODO: TEMPORARY CHECKING UNTIL REPL MODE IMPLEMENTED IN COMPILER
 
-public defn geom-eval-top-env () -> Frame :
-  val top-env = eval-top-env()
-  val geom-env = Frame([top-env])
+defn geom-eval-top-env () :
+  val geom-pkg = Package(`geom, [*packages*[`core]])
+  val geom-env = frame(geom-pkg)
   add-binding(geom-env, `V2f, V2f)
   add-binding(geom-env, `V3f, V3f)
   add-binding(geom-env, `V4f, V4f)
@@ -55,11 +55,12 @@ public defn geom-eval-top-env () -> Frame :
   add-binding(geom-env, `font-3x3, font-3x3)
   add-binding(geom-env, `get-glyph, get-glyph)
   add-binding(geom-env, `polyline, polyline)
-  geom-env
 
-public defn ao-eval-top-env () -> Frame :
-  val geom-env = geom-eval-top-env()
-  val ao-env = Frame([geom-env])
+geom-eval-top-env()
+
+defn ao-eval-top-env () :
+  val ao-pkg = Package(`ao, [*packages*[`geom]])
+  val ao-env = frame(ao-pkg)
   val Vec3FieldT = Type(`Vec3Field, fn (x) : x is Vec3Field, fn (x): x as Vec3Field)
   add-binding(ao-env, `Vec3Field, Vec3FieldT)
   val FloFieldT = Type(`FloField, fn (x) : x is FloField, fn (x): x as FloField)
@@ -190,16 +191,18 @@ public defn ao-eval-top-env () -> Frame :
   add-binding(ao-env, `attach, attach)
   add-binding(ao-env, `join-pieces, join-pieces)
   add-binding(ao-env, `smash, smash)
-  add-binding(ao-env , `nest, nest)
-  ao-env
+  add-binding(ao-env, `nest, nest)
+  add-binding(ao-env, `all-forms, all-forms)
+
+ao-eval-top-env()
 
 public defn eval-ao (s:String, ao-env:Frame) -> Geom :
   val forms = read-all(s)
-  println-all(["FORMS: " forms])
+  ;; println-all(["FORMS: " forms])
   val es = unwrap-all(parse(forms))
-  println-all(["EXP: "   es])
+  ;; println-all(["EXP: "   es])
   val e  = eval-begin(List(ao-env), es)
-  println-all(["G: " e])
+  ;; println-all(["G: " e])
   match(e) :
     (g:Geom) : jit(g)
     (o) :      Msg(to-string(o))

@@ -863,10 +863,10 @@ public defn LayoutGlue (glue:Glue) :
     defmethod glue (this) : glue
 
 public defmulti glue-of<?T> (s:?T&Poseable, a:Float) -> T
-defmethod glue-of (s:Shape, a:Float) -> Shape : Glue(1.0f)
-defmethod glue-of (s:Layer, a:Float) -> Layer : LayerGlue(Glue(1.0f))
-defmethod glue-of (s:Block, a:Float) -> Block : BlockGlue(Glue(1.0f))
-defmethod glue-of (s:Layout, a:Float) -> Layout : LayoutGlue(Glue(1.0f))
+defmethod glue-of (s:Shape, a:Float) -> Shape : Glue(a)
+defmethod glue-of (s:Layer, a:Float) -> Layer : LayerGlue(Glue(a))
+defmethod glue-of (s:Block, a:Float) -> Block : BlockGlue(Glue(a))
+defmethod glue-of (s:Layout, a:Float) -> Layout : LayoutGlue(Glue(a))
 
 defn glue-when<?T> (zero?:True|False, shapes:Seqable<?T&Poseable>) -> Seq<T> :
   generate<T> :
@@ -890,7 +890,9 @@ public defn assign-glue-idx<?T> (ishapes:Seqable<?T&Poseable>, target:Float, idx
   val gap-tot = (target - tot)
   for shape in shapes seq :
     match(shape) :
-      (g:AnyGlue&T) : spacer(shape, (amount(g) / glue-tot) * gap-tot * V3f-unit(idx))
+      (g:AnyGlue&T) :
+        val s = (amount(g) / glue-tot) * gap-tot * V3f-unit(idx)
+        spacer(shape, s)
       (s)           : s
 
 public defn stack-idx<?T> (d:Float, idx:Int, shapes:Seqable<?T&Poseable>) -> Seq<T> :
@@ -1022,4 +1024,52 @@ public defn nest (pcs:Seqable<Shape>, width:Float, space:Float) -> Layout :
   val lay = stack-y(join(for row in rows seq: Layout(stack-x(seq(Block, join(row, spacer-x(space))))),
                     Layout([ Block(spacer-y(space)) ])))
   Layout(cat-all(seq(blocks, lay)))
+
+defn num-to-bits (num:Int) -> Tuple<Int> :
+  to-tuple $ for i in 2 through 0 by -1 seq : (num >> i) & 1
+
+defn num-to-bitz (num:Int) -> Tuple<Tuple<Int>> :
+  to-tuple $ for i in 2 through 0 by -1 seq : num-to-bits((num >> (i * 3)) & 7)
+
+defn bits-to-num (bitz:Tuple<Int>) -> Int :
+  reduce(fn (a, x): a * 2 + x, bitz)
+
+defn bitz-to-num (bitz:Tuple<Tuple<Int>>) -> Int :
+  reduce(fn (a, x): a * 8 + x, seq(bits-to-num, bitz))
+
+defn canonicalize-bits (bits:Tuple<Int>) -> Tuple<Int> :
+  val rbits = [bits[2], bits[1], bits[0]]
+  if bits-to-num(bits) < bits-to-num(rbits): bits else: rbits
+
+defn canonicalize-bitz (bitz:Tuple<Tuple<Int>>) -> Tuple<Tuple<Int>> :
+  to-tuple $ seq(num-to-bits, lazy-qsort(seq(bits-to-num, seq(canonicalize-bits, bitz))))
+
+defn check (form:Tuple<Tuple<Int>>) -> True|False :
+  defn boxed? (dim:Int, idx:Int) :
+    label<True|False> return :
+      val dn? = for i in idx through 0 by -1 any? :
+        form[dim][i] == 1
+      val up? = for i in (idx + 1) to 3 any? :
+        form[dim][i] == 1
+      dn? and up?
+  label<True|False> return :
+    for i in 0 to 2 do :
+      for j in 0 to 2 do :
+        for k in 0 to 2 do :
+          if boxed?(0, i) and boxed?(1, j) and boxed?(2, k) :
+            return(false)
+    true
+
+public defn all-forms () :
+  val forms = HashTable<Int, Tuple<Tuple<Int>>>()
+  for i in 0 to (2 << 8) do :
+    val bitz  = num-to-bitz $ i
+    val cbitz = canonicalize-bitz $ bitz
+    val cnum  = bitz-to-num $ cbitz
+    val ok?   = count({ _ == 0}, seq(bits-to-num, cbitz)) <= 1
+    val ck?   = check(cbitz)
+    if ck? and ok? and not key?(forms, cnum) :
+      ;; println-all(["I " i " CNUM " cnum " BITZ " bitz " CBITZ " cbitz " CK? " ck? " OK? " ok? " KEY? " key?(forms, cnum)])
+      forms[cnum] = cbitz
+  forms
 
