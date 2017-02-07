@@ -119,7 +119,7 @@ public defn Layer (color:V4f, shape:Shape) :
 public defmethod mov (dp:V3f, p:Layer) -> Layer :
   Layer(mov-mat44(dp) * bounds(p), pos(p) + dp, color(p), shape(p))
 
-public defmethod shapes (p:Layer) : [ shape(p) ]
+public defmethod shapes (p:Layer) : [ mov(pos(p), shape(p)) ]
 
 public deftype Layoutable <: RealPoseable
 public defmulti blocks (l:Layoutable) -> Seqable<Block>
@@ -140,14 +140,14 @@ public defn Block (shape:Shape) : Block(WHITE, shape)
 public defmethod mov (dp:V3f, b:Block) -> Block :
   Block(to-tuple $ seq(mov{dp, _}, layers(b)))
 
-public defmethod shapes (p:Block) : cat-all(seq(shapes, layers(p)))
+public defmethod shapes (p:Block) : cat-all $ seq(shapes, layers(p))
 
 public deftype Layout <: Layoutable
 
 public defn Layout (elts:Collection<Layoutable>) :
   new Layout :
     defmethod bounds (this) : reduce(bit-or, for elt in elts seq: bounds(elt))
-    defmethod blocks (this) : cat-all(seq(blocks, elts))
+    defmethod blocks (this) : cat-all $ seq(blocks, elts)
     defmethod points (this) : to-tuple $ cat-all $ seq(points, elts)
 
 public defn Layout (blocks:Seq<Layoutable>) : Layout(to-tuple $ blocks)
@@ -256,7 +256,7 @@ defn to-mesh (rm:RenderMesh) -> Mesh :
       val toff = ti * 3
       yield(V3i(get-vert-index(rm, toff + 0), get-vert-index(rm, toff + 1), get-vert-index(rm, toff + 2)))
   val verts = generate<V3f> :
-    for vi in 0 to n-tris(rm) do :
+    for vi in 0 to n-verts(rm) do :
       val voff = vi * 3
       yield(V3f(get-vert-value(rm, voff + 0), get-vert-value(rm, voff + 1), get-vert-value(rm, voff + 2)))
   Mesh(to-tuple(verts), to-tuple(tris))
@@ -613,7 +613,7 @@ public defn bit-or (a:Shape, b:Shape) -> Shape :
         to-tuple $ cat(points(a), points(b)))
 
 public defn union (args:Seqable<Shape>) -> Shape :
-  reduce(bit-or, args)
+  reduce(bit-or, empty(), args)
 
 public defn bit-and (a:Shape, b:Shape) -> Shape :
   Shape(fn (p): max(fab(a, p), fab(b, p)), bounds(a) & bounds(b),
@@ -777,7 +777,8 @@ public defn space (gdims:V3f, shape:Shape) :
   val fac    = min(gratio)
   mag1(fac, shape)
 
-public defn empty () -> Shape : Shape(lit{FLOAT-MAX}, min-box())
+public defn empty () : Shape(lit{FLOAT-MAX}, min-box())
+public defn full () : Shape(lit{FLOAT-MIN}, inf-box())
 
 public defn space-x (gdim:Float, shape:Shape) : mag1(gdim / x(dims(bounds(shape))), shape)
 public defn space-y (gdim:Float, shape:Shape) : mag1(gdim / y(dims(bounds(shape))), shape)
@@ -961,8 +962,11 @@ public defn jit (g:Geom) -> Geom :
     (geom) :     geom
 
 public defn slice (z:Float, s:Shape) -> Polygon :
+  val half = V3f(10.0f, 10.0f, z)
   val tree = jit(s) as Tree
-  tree-render-slice(tree, Box(V3f(-5.0f, -5.0f, z), V3f(5.0f, 5.0f, z)), 50.0f)
+  val poly = tree-render-slice(tree, Box(-1.0f * half, 1.0f * half), 128.0f)
+  ;; println-all(["SLICED -> " poly])  
+  poly
 
 public defn save (z:Float, filename:String, s:Shape) -> False :
   val tree = jit(s) as Tree
@@ -976,28 +980,53 @@ public defn save (filename:String, s:Shape) -> False :
 
 val big = 1.0e6f
 
-public defn join-pieces (a:Shape, b:Shape, num:Int) -> [Shape, Shape] :
+public defn join-pieces (a:Shape, b:Shape, nslots:Int) -> [Shape, Shape] :
   val overlap = intersection $ [a, b]
   val dims    = dims(bounds(overlap))
   val idx     = max-idx(dims)
-  val nslots  = if num == 1: 2 else: num * 2 - 1
+  val num     = to-int $ round $ (to-float(nslots) / 2.0f)
   val tdims   = set-elt(V3f-fill(big), idx, dims[idx] / to-float(nslots))
   val tooth   = cube(tdims)
-  val tooths  = union $ stack-idx(dims[idx], idx, glue-when(nslots == 2, seq({ tooth }, 0 to num)))
+  val tooths  = union $ stack-idx(dims[idx], idx, glue-when(nslots % 2 == 0, seq({ tooth }, 0 to num)))
+  ;; println-all(["NUM " num " NSLOTS " nslots " DIMS " dims[idx] " TDIMS " tdims[idx] " TD " dims[idx] / to-float(nslots)])
   val teeth   = overlap & tooths
   val pa      = rem(a, teeth)
   val pb      = rem(b, pa)
   [pa, pb]
 
-public defn join-pieces (elts:Seqable<Shape>, num:Int) :
+public defn all-combos (a:Seqable<Int>, b:Seqable<Int>) -> Seqable<[Int, Int]> :
+  generate<[Int, Int]> :
+    for i in a do :
+      for j in b do :
+        yield([i, j])
+
+public defn join-pieces (elts:Seqable<Shape>, default-num:Int, nums:Tuple<KeyValue<[Int,Int],Int>>, sames:Tuple<[Int, Int, V3f]>) :
+  defn lookup-num (i:Int, j:Int) -> Int :
+    label<Int> return :  
+      for kv in nums do :
+        val [ki, kj] = key(kv)
+        if (ki == i and kj == j) or (ki == j and kj == i) :
+          return(value(kv))
+      default-num
   val pieces = to-array<Shape> $ elts
+  defn update (k:Int, nk:Shape) :
+    pieces[k] = nk
+    for [i, j, d] in sames do :
+      if i == k :
+        println-all(["SAME UPDATE " j " <- " i])
+        pieces[j] = pieces[j] & mov(d, pieces[i])
   for i in 0 to length(pieces) do :
     for j in (i + 1) to length(pieces) do :
       if not empty?(bounds(pieces[i]) & bounds(pieces[j])) :
+        val num = lookup-num(i, j)
+        println-all(["I " i " J " j " NUM " num])
         val [ni, nj] = join-pieces(pieces[i], pieces[j], num)
-        pieces[i] = ni
-        pieces[j] = nj
+        update(i, ni)
+        update(j, nj)
   pieces
+
+public defn join-pieces (elts:Seqable<Shape>, num:Int) :
+  join-pieces(elts, num, [], [])
 
 ;; TODO: LIMITED TO AXIS ALIGNED SHAPES
 public defn smash (s:Shape) -> Shape :

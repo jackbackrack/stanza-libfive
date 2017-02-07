@@ -55,6 +55,8 @@ defn geom-eval-top-env () :
   add-binding(geom-env, `font-3x3, font-3x3)
   add-binding(geom-env, `get-glyph, get-glyph)
   add-binding(geom-env, `polyline, polyline)
+  add-binding(geom-env, `svg, svg)
+  add-binding(geom-env, `mag-mat44, mag-mat44)
 
 geom-eval-top-env()
 
@@ -192,7 +194,9 @@ defn ao-eval-top-env () :
   add-binding(ao-env, `join-pieces, join-pieces)
   add-binding(ao-env, `smash, smash)
   add-binding(ao-env, `nest, nest)
+  add-binding(ao-env, `shapes, shapes)
   add-binding(ao-env, `all-forms, all-forms)
+  add-binding(ao-env, `all-combos, all-combos)
 
 ao-eval-top-env()
 
