@@ -157,10 +157,14 @@ public defmethod mov (dp:V3f, l:Layout) -> Layout :
 
 public defmethod shapes (p:Layout) : cat-all(seq(shapes, blocks(p)))
 
+public defstruct BoundedTree <: Geom :
+  bounds : Box
+  tree:    Tree
+
 public defstruct TreeLayer <: Geom :
   pos : V3f
   color : V4f
-  tree : Tree
+  tree : BoundedTree
 
 public defstruct TreeBlock <: Geom :
   layers : Collection<TreeLayer>
@@ -814,7 +818,7 @@ public defn stack-idx<?T> (ishapes:Seqable<?T&Poseable>, idx:Int, dir:Float) -> 
   filter({ volume(dims(bounds(_))) > 0.0f }, res)
 
 public defn stack-x<?T> (shapes:Seqable<?T&Poseable>) -> Seq<T> :
-  stack-idx(shapes, 0, -1.0f)
+  stack-idx(shapes, 0,  1.0f)
 
 public defn stack-y<?T> (shapes:Seqable<?T&Poseable>) -> Seq<T> :
   stack-idx(shapes, 1,  1.0f)
@@ -939,10 +943,10 @@ public defn align-min-z<?T> (shapes:Seqable<?T&Poseable>) -> Seq<T> :
 public defn align-max-z<?T> (shapes:Seqable<?T&Poseable>) -> Seq<T> :
   align-it(shapes, { z(hi(_)) }, mov-z)
 
-defn jit-shape (s:Shape) -> Tree :
+defn jit-shape (s:Shape) -> BoundedTree :
   val e = fab(s, Vec3Field(fab-x(), fab-y(), fab-z()))
   ;; println-all(["E = " e])
-  tree(e)
+  BoundedTree(bounds(s), tree(e))
 
 defn jit-layer (l:Layer) -> TreeLayer :
   TreeLayer(pos(l), color(l), jit-shape(shape(l)))
@@ -962,19 +966,18 @@ public defn jit (g:Geom) -> Geom :
     (geom) :     geom
 
 public defn slice (z:Float, s:Shape) -> Polygon :
-  val half = V3f(10.0f, 10.0f, z)
-  val tree = jit(s) as Tree
-  val poly = tree-render-slice(tree, Box(-1.0f * half, 1.0f * half), 128.0f)
-  ;; println-all(["SLICED -> " poly])  
+  val bt = jit(s) as BoundedTree
+  val bds = Box(xy(lo(bounds(s)) + V3f(0.0f, 0.0f, z)), xy(hi(bounds(s)) + V3f(0.0f, 0.0f, z)))
+  val poly = tree-render-slice(tree(bt), bds, 50.0f)
   poly
 
 public defn save (z:Float, filename:String, s:Shape) -> False :
-  val tree = jit(s) as Tree
-  tree-export-slice(tree, filename, Box(V3f(-5.0f, -5.0f, z), V3f(5.0f, 5.0f, z)), 50.0f)
+  val bt = jit(s) as BoundedTree
+  tree-export-slice(tree(bt), filename, bounds(s), 50.0f)
 
 public defn save (filename:String, s:Shape) -> False :
-  val tree = jit(s) as Tree
-  tree-export-mesh(tree, filename, Box(V3f(-5.0f, -5.0f, -5.0f), V3f(5.0f, 5.0f, 5.0f)), 50.0f)
+  val bt = jit(s) as BoundedTree
+  tree-export-mesh(tree(bt), filename, bounds(s), 50.0f)
 
 ;;;
 

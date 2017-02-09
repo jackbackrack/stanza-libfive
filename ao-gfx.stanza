@@ -7,10 +7,9 @@ defpackage ao-gfx :
   import geom
   import geom-gfx
 
-defmethod render (tree:Tree) -> False :
+defmethod render (bt:BoundedTree) -> False :
   ;; TODO MAKE PARAMETERIZABLE
-  val half = V3f-fill(20.0f)
-  val mesh = tree-render-mesh(tree, Box(-1.0f * half, 1.0f * half), 32.0f)
+  val mesh = tree-render-mesh(tree(bt), bounds(bt), 32.0f)
   ;; println-all(["MESH: V = " length(vertices(mesh)) " F = " length(faces(mesh))])
   render(mesh)
   ;; gl-push-attrib(GL-CURRENT-BIT)
