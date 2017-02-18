@@ -1003,6 +1003,14 @@ public defn all-combos (a:Seqable<Int>, b:Seqable<Int>) -> Seqable<[Int, Int]> :
       for j in b do :
         yield([i, j])
 
+defn captured? (b1:Box, b2:Box) -> True|False :
+  defn any-captured? (i:Box, a:Box) :
+    defn captured-on? (i:Box, a:Box, d:Int) :
+      abs(lo(i)[d] - lo(a)[d]) > 0.0f and abs(hi(a)[d] - hi(i)[d]) > 0.0f
+    any?(captured-on?{i, a, _}, 0 to 3)
+  val intersection = b1 & b2
+  any-captured?(intersection, b1) and any-captured?(intersection, b2)
+
 public defn join-pieces (elts:Seqable<Shape>, default-num:Int, nums:Tuple<KeyValue<[Int,Int],Int>>, sames:Tuple<[Int, Int, V3f]>) :
   defn lookup-num (i:Int, j:Int) -> Int :
     label<Int> return :  
@@ -1020,8 +1028,9 @@ public defn join-pieces (elts:Seqable<Shape>, default-num:Int, nums:Tuple<KeyVal
         pieces[j] = pieces[j] & mov(d, pieces[i])
   for i in 0 to length(pieces) do :
     for j in (i + 1) to length(pieces) do :
-      if not empty?(bounds(pieces[i]) & bounds(pieces[j])) :
-        val num = lookup-num(i, j)
+      val [bi, bj] = [bounds(pieces[i]), bounds(pieces[j])]
+      if not empty?(bi & bj) :
+        val num = 2 when captured?(bi, bj) else lookup-num(i, j)
         println-all(["I " i " J " j " NUM " num])
         val [ni, nj] = join-pieces(pieces[i], pieces[j], num)
         update(i, ni)
