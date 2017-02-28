@@ -1004,12 +1004,13 @@ public defn all-combos (a:Seqable<Int>, b:Seqable<Int>) -> Seqable<[Int, Int]> :
         yield([i, j])
 
 defn captured? (b1:Box, b2:Box) -> True|False :
-  defn any-captured? (i:Box, a:Box) :
+  defn any-captured? (i:Box, a:Box, big-d:Int) :
     defn captured-on? (i:Box, a:Box, d:Int) :
       abs(lo(i)[d] - lo(a)[d]) > 0.0f and abs(hi(a)[d] - hi(i)[d]) > 0.0f
-    any?(captured-on?{i, a, _}, 0 to 3)
+    any?(captured-on?{i, a, _}, filter({ _ != big-d}, 0 to 3))
   val intersection = b1 & b2
-  any-captured?(intersection, b1) and any-captured?(intersection, b2)
+  val big-d = max-idx(dims(intersection))
+  any-captured?(intersection, b1, big-d) and any-captured?(intersection, b2, big-d)
 
 public defn join-pieces (elts:Seqable<Shape>, default-num:Int, nums:Tuple<KeyValue<[Int,Int],Int>>, sames:Tuple<[Int, Int, V3f]>) :
   defn lookup-num (i:Int, j:Int) -> Int :
@@ -1049,22 +1050,40 @@ public defn smash (s:Shape) -> Shape :
   defn rot (s) : if idx == 0 : reflect-xz(s) else if idx == 1 : reflect-yz(s) else : s
   rot(mov((- ctr), s))
 
-public defn nest (pcs:Seqable<Shape>, width:Float, space:Float) -> Layout :
-  val spcs = lazy-qsort({ area(dims(bounds(_))) }, pcs)
-  ;; val lay  = stack-x(seq(Block, join(spcs, spacer-x(space))))
-  ;; cat-all(seq(shapes, lay))
-  val row  = Vector<Shape>()
-  val rows = generate<Tuple<Shape>> :
-    for pc in spcs do :
-      val off = reduce(plus, 0.0f, join(seq({ x(dims(bounds(_))) }, row), space))
-      if off > width :
+defn segment<?T> (shapes:Seqable<?T>, width:T -> Float, max-width:Float, space:Float) -> Seqable<Tuple<T>> :
+  val row = Vector<T>()
+  generate<Tuple<T>> :
+    for pc in shapes do :
+      val off = reduce(plus, 0.0f, join(seq(width, row), space))
+      if off > max-width :
         yield(to-tuple $ row)
         clear(row)
       add(row, pc)
     if length(row) > 0 : yield(to-tuple $ row)
-  val lay = stack-y(join(for row in rows seq: Layout(stack-x(seq(Block, join(row, spacer-x(space))))),
-                    Layout([ Block(spacer-y(space)) ])))
-  Layout(cat-all(seq(blocks, lay)))
+
+public defn nest (pcs:Seqable<Shape>, size:V3f, space:Float) -> Seq<Layout> :
+  val spcs  = to-tuple $ lazy-qsort({ area(dims(bounds(_))) }, pcs)
+  val rpcs  = seq(fn (pc): reflect-xy(pc) when max-idx(dims(bounds(pc))) != max-idx(size) else pc, spcs)
+  val rows  = segment(rpcs, { x(dims(bounds(_))) }, x(size), space)
+  val pages = segment(rows, { y(dims(bounds(union(_)))) }, y(size), space)
+  for page in pages seq :
+    val lay  = stack-y(join(for row in page seq: Layout(stack-x(seq(Block, join(row, spacer-x(space))))),
+                       Layout([ Block(spacer-y(space)) ])))
+    Layout(cat-all(seq(blocks, lay)))
+
+;;   val row  = Vector<Shape>()
+;;   val rows = generate<Tuple<Shape>> :
+;;     for pc in spcs do :
+;;       val rpc = reflect-xy(pc) when max-idx(dims(bounds(pc))) != max-idx(size) else pc
+;;       val off = reduce(plus, 0.0f, join(seq({ x(dims(bounds(_))) }, row), space))
+;;       if off > x(size) :
+;;         yield(to-tuple $ row)
+;;         clear(row)
+;;       add(row, rpc)
+;;     if length(row) > 0 : yield(to-tuple $ row)
+;;   val lay = stack-y(join(for row in rows seq: Layout(stack-x(seq(Block, join(row, spacer-x(space))))),
+;;                     Layout([ Block(spacer-y(space)) ])))
+;;   Layout(cat-all(seq(blocks, lay)))
 
 defn num-to-bits (num:Int) -> Tuple<Int> :
   to-tuple $ for i in 2 through 0 by -1 seq : (num >> i) & 1
