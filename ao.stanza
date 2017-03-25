@@ -87,7 +87,7 @@ defmethod count (f:FloFieldOp) -> Int :
 public deftype Poseable <: Geom
 public defmulti bounds (p:Poseable) -> Box
 public defmulti points (p:Poseable) -> Tuple<V3f>
-public defmulti mov<?T> (dp:V3f, p:?T&Poseable) -> T
+public defmulti xyz<?T> (mat:Mat44, p:?T&Poseable) -> T
 public defmulti shapes (p:Poseable) -> Seqable<Shape>
 
 public defn mov-x<?T> (dx:Float, p:?T&Poseable) -> T : mov(V3f(dx, 0.0f, 0.0f), p)
@@ -100,13 +100,13 @@ public deftype RealPoseable <: Poseable
 public defmulti layers (p:RealPoseable) -> Seqable<Layer>
 
 public deftype Layer <: RealPoseable
-public defmulti pos (l:Layer) -> V3f
+public defmulti mat (l:Layer) -> Mat44
 public defmulti shape (l:Layer) -> Shape
 public defmulti color (l:Layer) -> V4f
 
-public defn Layer (bounds:Box, pos:V3f, color:V4f, shape:Shape) :
+public defn Layer (bounds:Box, mat:Mat44, color:V4f, shape:Shape) :
   new Layer :
-    defmethod pos (this) : pos
+    defmethod mat (this) : mat
     defmethod bounds (this) : bounds
     defmethod points (this) : points(shape)
     defmethod shape (this) : shape
@@ -114,12 +114,12 @@ public defn Layer (bounds:Box, pos:V3f, color:V4f, shape:Shape) :
     defmethod layers (this) : [this]
 
 public defn Layer (color:V4f, shape:Shape) :
-  Layer(bounds(shape), V3f(0.0f, 0.0f, 0.0f), color, shape)
+  Layer(bounds(shape), id-mat44(), color, shape)
 
-public defmethod mov (dp:V3f, p:Layer) -> Layer :
-  Layer(mov-mat44(dp) * bounds(p), pos(p) + dp, color(p), shape(p))
+public defmethod xyz (xf:Mat44, p:Layer) -> Layer :
+  Layer(xf * bounds(p), mat(p) * xf, color(p), shape(p))
 
-public defmethod shapes (p:Layer) : [ mov(pos(p), shape(p)) ]
+public defmethod shapes (p:Layer) : [ xyz(mat(p), shape(p)) ]
 
 public deftype Layoutable <: RealPoseable
 public defmulti blocks (l:Layoutable) -> Seqable<Block>
@@ -137,8 +137,8 @@ public defn Block (layers:Seq<Layer>) : Block(to-tuple $ layers)
 public defn Block (color:V4f, shape:Shape) : Block([Layer(color, shape)])
 public defn Block (shape:Shape) : Block(WHITE, shape)
 
-public defmethod mov (dp:V3f, b:Block) -> Block :
-  Block(to-tuple $ seq(mov{dp, _}, layers(b)))
+public defmethod xyz (mat:Mat44, b:Block) -> Block :
+  Block(to-tuple $ seq(xyz{mat, _}, layers(b)))
 
 public defmethod shapes (p:Block) : cat-all $ seq(shapes, layers(p))
 
@@ -152,8 +152,8 @@ public defn Layout (elts:Collection<Layoutable>) :
 
 public defn Layout (blocks:Seq<Layoutable>) : Layout(to-tuple $ blocks)
 
-public defmethod mov (dp:V3f, l:Layout) -> Layout :
-  Layout(to-tuple $ seq(mov{dp, _}, blocks(l)))
+public defmethod xyz (mat:Mat44, l:Layout) -> Layout :
+  Layout(to-tuple $ seq(xyz{mat, _}, blocks(l)))
 
 public defmethod shapes (p:Layout) : cat-all(seq(shapes, blocks(p)))
 
@@ -162,7 +162,7 @@ public defstruct BoundedTree <: Geom :
   tree:    Tree
 
 public defstruct TreeLayer <: Geom :
-  pos : V3f
+  mat : Mat44
   color : V4f
   tree : BoundedTree
 
@@ -337,19 +337,26 @@ public defn max-lit () : lit(FLOAT-MAX)
 
 public defn nan-fill (x:FloField, y:FloField) -> FloField : binary("nan-fill", x, y)
 public defn modulo (x:FloField, y:FloField) -> FloField :
-  if lit?(x) and lit?(y): lit(modulo(lit-value(x), lit-value(y))) else : binary("mod", x, y)
+  if lit?(x) and lit?(y): lit(modulo(lit-value(x), lit-value(y)))
+  else : binary("mod", x, y)
 public defn times (x:FloField, y:FloField) -> FloField : 
   if lit?(x) and lit?(y): lit(times(lit-value(x), lit-value(y)))
-  else if lit?(x, 1.0f): y else if lit?(y, 1.0f): x else : binary("mul", x, y)
+  else if lit?(x, 1.0f): y else if lit?(y, 1.0f): x 
+  else if lit?(x, 0.0f) or lit?(y, 0.0f): lit(0.0f)
+  else : binary("mul", x, y)
 public defn min (x:FloField, y:FloField) -> FloField : 
   if lit?(x) and lit?(y): lit(min(lit-value(x), lit-value(y)))
-  else if lit?(y, FLOAT-MAX): x else if lit?(x, FLOAT-MAX): y else : binary("min", x, y)
+  else if lit?(y, FLOAT-MAX): x else if lit?(x, FLOAT-MAX): y
+  else : binary("min", x, y)
 public defn max (x:FloField, y:FloField) -> FloField :
   if lit?(x) and lit?(y): lit(max(lit-value(x), lit-value(y)))
-  else if lit?(y, FLOAT-MIN): x else if lit?(x, FLOAT-MIN): y else : binary("max", x, y)
+  else if lit?(y, FLOAT-MIN): x else if lit?(x, FLOAT-MIN): y
+  else : binary("max", x, y)
 public defn divide (x:FloField, y:FloField) -> FloField : 
   if lit?(x) and lit?(y): lit(divide(lit-value(x), lit-value(y)))
-  else if lit?(y, 1.0f): x else : binary("div", x, y)
+  else if lit?(y, 1.0f): x 
+  else if lit?(x, 0.0f): x
+  else : lit(0.0f)
 public defn plus (x:FloField, y:FloField) -> FloField :
   if lit?(x) and lit?(y): lit(plus(lit-value(x), lit-value(y)))
   else if lit?(x, 0.0f): y else if lit?(y, 0.0f): x else : binary("add", x, y)
@@ -469,6 +476,13 @@ public defn times (s:FloField, v:Vec3Field) -> Vec3Field :
 public defn times (a:Vec3Field, b:Vec3Field) -> Vec3Field :
   Vec3Field(x(a) * x(b), y(a) * y(b), z(a) * z(b))
 
+public defn times (m:Mat44, v:Vec3Field) -> Vec3Field :
+  val px = x(v) * lit(m[0,0]) + y(v) * lit(m[1,0]) + z(v) * lit(m[2,0]) + lit(m[3,0])
+  val py = x(v) * lit(m[0,1]) + y(v) * lit(m[1,1]) + z(v) * lit(m[2,1]) + lit(m[3,1])
+  val pz = x(v) * lit(m[0,2]) + y(v) * lit(m[1,2]) + z(v) * lit(m[2,2]) + lit(m[3,2])
+  val pw = x(v) * lit(m[0,3]) + y(v) * lit(m[1,3]) + z(v) * lit(m[2,3]) + lit(m[3,3])
+  Vec3Field(px / pw, py / pw, pz / pw)
+
 public defn dot (a:Vec3Field, b:Vec3Field) -> FloField :
   x(a) * x(b) + y(a) * y(b) + z(a) * z(b)
 
@@ -486,14 +500,17 @@ public defn divide (a:Vec3Field, b:Vec3Field) -> Vec3Field :
 
 public defn modulo (a:Vec3Field, b:Vec3Field) -> Vec3Field :
   Vec3Field(y(a) * z(b) - z(a) * y(b),
-      z(a) * x(b) - x(a) * z(b),
-      x(a) * y(b) - y(a) * x(b))
+            z(a) * x(b) - x(a) * z(b),
+            x(a) * y(b) - y(a) * x(b))
 
 public defn with-xyz (mat:Mat44, f:(Vec3Field) -> Vec3Field, s:Shape) -> Shape :
   Shape(fn (p): fab(s, f(p)), mat * bounds(s), to-tuple $ seq({mat * _} points(s)))
 
-public defmethod mov (dp:V3f, s:Shape) -> Shape :
-  with-xyz(mov-mat44(dp), fn (p): p - lit(dp), s)
+public defmethod xyz (mat:Mat44, s:Shape) -> Shape :
+  with-xyz(mat, fn (p) : inverse(mat) * p, s)
+
+public defn mov<?T> (dp:V3f, s:?T&Poseable) -> T :
+  xyz(mov-mat44(dp), s)
 
 ;; public defn mov (dx:FloField, dy:FloField, f:Shape) -> FloField :
 ;;   mov(dx, dy, lit(0.0), f)
@@ -504,59 +521,38 @@ public defn degrees-to-radians (d:Float) -> Float :
 public defn radians-to-degrees (a:Float) -> Float :
   a * to-float(PI-F) / 180.0f
 
-public defn rot-x (d:Float, s:Shape) -> Shape :
-  val a = degrees-to-radians(d)
-  val [ca, sa] = [cos(a), sin(a)]
-  with-xyz(rot-mat44(V3f(1.0f, 0.0f, 0.0f), a),
-           fn (p): Vec3Field(x(p), lit(ca) * y(p) + lit(sa) * z(p), lit((- sa)) * y(p) + lit(ca) * z(p)), s)
+public defn rot-x<?T> (d:Float, s:?T&Poseable) -> T :
+  xyz(rot-mat44(V3f(1.0f, 0.0f, 0.0f), degrees-to-radians(d)), s)
 
-public defn rot-y (d:Float, s:Shape) -> Shape :
-  val a = degrees-to-radians(d)
-  val [ca, sa] = [cos(a), sin(a)]
-  with-xyz(rot-mat44(V3f(0.0f, 1.0f, 0.0f), a),
-           fn (p): Vec3Field(lit(ca) * x(p) + lit(sa) * z(p), y(p), lit((- sa)) * x(p) + lit(ca) * z(p)), s)
+public defn rot-y<?T> (d:Float, s:?T&Poseable) -> T :
+  xyz(rot-mat44(V3f(0.0f, 1.0f, 0.0f), degrees-to-radians(d)), s)
 
-public defn rot-z (d:Float, s:Shape) -> Shape :
-  val a = degrees-to-radians(d)
-  val [ca, sa] = [cos(a), sin(a)]
-  with-xyz(rot-mat44(V3f(0.0f, 0.0f, 1.0f), a),
-           fn (p): Vec3Field(lit(ca) * x(p) + lit(sa) * y(p), lit((- sa)) * x(p) + lit(ca) * y(p), z(p)), s)
+public defn rot-z<?T> (d:Float, s:?T&Poseable) -> T :
+  xyz(rot-mat44(V3f(0.0f, 0.0f, 1.0f), degrees-to-radians(d)), s)
 
-public defn reflect-x (s:Shape) -> Shape :
-  with-xyz(mag-mat44(V3f(-1.0f, 1.0f, 1.0f)), fn (p): Vec3Field((- x(p)), y(p), z(p)), s)
+public defn reflect-x<?T> (s:?T&Poseable) -> T : xyz(mag-mat44(V3f(-1.0f, 1.0f, 1.0f)), s)
 
-public defn reflect-y (s:Shape) -> Shape :
-  with-xyz(mag-mat44(V3f( 1.0f,-1.0f, 1.0f)), fn (p): Vec3Field(x(p), (- y(p)), z(p)), s)
+public defn reflect-y<?T> (s:?T&Poseable) -> T : xyz(mag-mat44(V3f( 1.0f,-1.0f, 1.0f)), s)
 
-public defn reflect-z (s:Shape) -> Shape :
-  with-xyz(mag-mat44(V3f( 1.0f, 1.0f,-1.0f)), fn (p): Vec3Field(x(p), y(p), (- z(p))), s)
+public defn reflect-z<?T> (s:?T&Poseable) -> T : xyz(mag-mat44(V3f( 1.0f, 1.0f,-1.0f)), s)
 
-public defn reflect-xy (s:Shape) -> Shape :
-  with-xyz(reflect-xy-mat44(), fn (p): Vec3Field(y(p), x(p), z(p)), s)
+public defn reflect-xy<?T> (s:?T&Poseable) -> T : xyz(reflect-xy-mat44(), s)
 
-public defn reflect-xz (s:Shape) -> Shape :
-  with-xyz(reflect-xz-mat44(), fn (p): Vec3Field(z(p), y(p), x(p)), s)
+public defn reflect-xz<?T> (s:?T&Poseable) -> T : xyz(reflect-xz-mat44(), s)
 
-public defn reflect-yz (s:Shape) -> Shape :
-  with-xyz(reflect-yz-mat44(), fn (p): Vec3Field(x(p), z(p), y(p)), s)
+public defn reflect-yz<?T> (s:?T&Poseable) -> T : xyz(reflect-yz-mat44(), s)
 
-public defn mag (fac:Float, s:Shape) -> Shape :
-  with-xyz(mag-mat44(fac), fn (p): p / lit(fac), s)
+public defn mag<?T> (fac:Float, s:?T&Poseable) -> T : xyz(mag-mat44(fac), s)
 
-public defn mag1 (sa:Float, s:Shape) -> Shape :
-  with-xyz(mag-mat44(sa), fn (p): p / lit(sa), s)
+public defn mag1<?T> (sa:Float, s:?T&Poseable) -> T : xyz(mag-mat44(sa), s)
 
-public defn mag (fac:V3f, s:Shape) -> Shape :
-  with-xyz(mag-mat44(fac), fn (p): p / lit(fac), s)
+public defn mag<?T> (fac:V3f, s:?T&Poseable) -> T : xyz(mag-mat44(fac), s)
 
-public defn mag-x (sx:Float, s:Shape) -> Shape :
-  with-xyz(mag-mat44(V3f(sx, 1.0f, 1.0f)), fn (p): Vec3Field(x(p) / lit(sx), y(p), z(p)), s)
+public defn mag-x<?T> (sx:Float, s:?T&Poseable) -> T : xyz(mag-mat44(V3f(sx, 1.0f, 1.0f)), s)
 
-public defn mag-y (sy:Float, s:Shape) -> Shape :
-  with-xyz(mag-mat44(V3f(1.0f, sy, 1.0f)), fn (p): Vec3Field(x(p), y(p) / lit(sy), z(p)), s)
+public defn mag-y<?T> (sy:Float, s:?T&Poseable) -> T : xyz(mag-mat44(V3f(1.0f, sy, 1.0f)), s)
 
-public defn mag-z (sz:Float, s:Shape) -> Shape :
-  with-xyz(mag-mat44(V3f(1.0f, 1.0f, sz)), fn (p): Vec3Field(x(p), y(p), z(p) / lit(sz)), s)
+public defn mag-z<?T> (sz:Float, s:?T&Poseable) -> T : xyz(mag-mat44(V3f(1.0f, 1.0f, sz)), s)
 
 defn shear-x-y (ymin:Float, ymax:Float, dx0:Float, dx1:Float, s:Shape) -> Shape :
   defn xf (p) :
@@ -949,7 +945,7 @@ defn jit-shape (s:Shape) -> BoundedTree :
   BoundedTree(bounds(s), tree(e))
 
 defn jit-layer (l:Layer) -> TreeLayer :
-  TreeLayer(pos(l), color(l), jit-shape(shape(l)))
+  TreeLayer(mat(l), color(l), jit-shape(shape(l)))
 
 defn jit-block (b:Block) -> TreeBlock :
   TreeBlock(to-tuple $ seq(jit-layer, layers(b)))
@@ -983,18 +979,22 @@ public defn save (filename:String, s:Shape) -> False :
 
 val big = 1.0e6f
 
-public defn join-pieces (a:Shape, b:Shape, nslots:Int) -> [Shape, Shape] :
-  val overlap = intersection $ [a, b]
-  val dims    = dims(bounds(overlap))
-  val idx     = max-idx(dims)
-  val num     = to-int $ round $ (to-float(nslots) / 2.0f)
-  val tdims   = set-elt(V3f-fill(big), idx, dims[idx] / to-float(nslots))
-  val tooth   = cube(tdims)
-  val tooths  = union $ stack-idx(dims[idx], idx, glue-when(nslots % 2 == 0, seq({ tooth }, 0 to num)))
-  ;; println-all(["NUM " num " NSLOTS " nslots " DIMS " dims[idx] " TDIMS " tdims[idx] " TD " dims[idx] / to-float(nslots)])
-  val teeth   = overlap & tooths
-  val pa      = rem(a, teeth)
-  val pb      = rem(b, pa)
+public defn join-pieces (a:Shape, b:Shape, get-slots-info:(Float, Float) -> [Int, Float, Float]) -> [Shape, Shape] :
+  val overlap   = intersection $ [a, b]
+  val dims      = dims(bounds(overlap))
+  val idx       = max-idx(dims)
+  val [inslots, slot-off, slot-size] = get-slots-info(lo(bounds(overlap))[idx], dims[idx])
+  val nslots    = inslots when inslots > 0 else to-int $ ceil $ dims[idx] / slot-size 
+  val num       = to-int $ round $ (to-float(nslots) / 2.0f)
+  val slot-dim  = (dims[idx] / to-float(nslots)) when nslots > 0 else slot-size
+  val tdims     = set-elt(V3f-fill(big),  idx, slot-dim)
+  val vslot-off = set-elt(V3f-fill(0.0f), idx, (- slot-off))
+  val tooth     = cube(tdims)
+  val tooths    = union $ stack-idx(slot-dim * to-float(nslots), idx, glue-when(nslots % 2 == 0, seq({ tooth }, 0 to num)))
+  ;; println-all(["NUM " num " NSLOTS " nslots " IDX " idx " DIMS " dims " TDIMS " tdims[idx]])
+  val teeth     = overlap & mov(center(bounds(overlap)) + vslot-off, tooths)
+  val pa        = rem(a, teeth)
+  val pb        = rem(b, pa)
   [pa, pb]
 
 public defn all-combos (a:Seqable<Int>, b:Seqable<Int>) -> Seqable<[Int, Int]> :
@@ -1004,22 +1004,26 @@ public defn all-combos (a:Seqable<Int>, b:Seqable<Int>) -> Seqable<[Int, Int]> :
         yield([i, j])
 
 defn captured? (b1:Box, b2:Box) -> True|False :
+  val eps = 0.001f
   defn any-captured? (i:Box, a:Box, big-d:Int) :
     defn captured-on? (i:Box, a:Box, d:Int) :
-      abs(lo(i)[d] - lo(a)[d]) > 0.0f and abs(hi(a)[d] - hi(i)[d]) > 0.0f
+      abs(lo(i)[d] - lo(a)[d]) > eps and abs(hi(a)[d] - hi(i)[d]) > eps
     any?(captured-on?{i, a, _}, filter({ _ != big-d}, 0 to 3))
   val intersection = b1 & b2
   val big-d = max-idx(dims(intersection))
   any-captured?(intersection, b1, big-d) and any-captured?(intersection, b2, big-d)
 
-public defn join-pieces (elts:Seqable<Shape>, default-num:Int, nums:Tuple<KeyValue<[Int,Int],Int>>, sames:Tuple<[Int, Int, V3f]>) :
-  defn lookup-num (i:Int, j:Int) -> Int :
-    label<Int> return :  
-      for kv in nums do :
+public defn join-pieces (elts:Seqable<Shape>,
+                         default-slot-info-getter:((Float, Float) -> [Int, Float, Float]),
+                         slots-info-getters:Tuple<KeyValue<[Int,Int],((Float, Float) -> [Int, Float, Float])>>,
+                         sames:Tuple<[Int, Int, V3f]>) :
+  defn lookup-slot-info-getter (i:Int, j:Int) -> ((Float,Float) -> [Int, Float, Float]) :
+    label<((Float,Float) -> [Int, Float, Float])> return :  
+      for kv in slots-info-getters do :
         val [ki, kj] = key(kv)
         if (ki == i and kj == j) or (ki == j and kj == i) :
           return(value(kv))
-      default-num
+      default-slot-info-getter
   val pieces = to-array<Shape> $ elts
   defn update (k:Int, nk:Shape) :
     pieces[k] = nk
@@ -1031,14 +1035,14 @@ public defn join-pieces (elts:Seqable<Shape>, default-num:Int, nums:Tuple<KeyVal
     for j in (i + 1) to length(pieces) do :
       val [bi, bj] = [bounds(pieces[i]), bounds(pieces[j])]
       if not empty?(bi & bj) :
-        val num = 2 when captured?(bi, bj) else lookup-num(i, j)
+        val num = (fn (o:Float,s:Float) : [2, 0.0f, 0.0f]) when captured?(bi, bj) else lookup-slot-info-getter(i, j)
         println-all(["I " i " J " j " NUM " num])
         val [ni, nj] = join-pieces(pieces[i], pieces[j], num)
         update(i, ni)
         update(j, nj)
   pieces
 
-public defn join-pieces (elts:Seqable<Shape>, num:Int) :
+public defn join-pieces (elts:Seqable<Shape>, num:(Float,Float) -> [Int, Float, Float]) :
   join-pieces(elts, num, [], [])
 
 ;; TODO: LIMITED TO AXIS ALIGNED SHAPES
