@@ -986,7 +986,8 @@ public defn join-pieces (a:Shape, b:Shape, get-slots-info:(Float, Float) -> [Int
   val [inslots, slot-off, slot-size] = get-slots-info(lo(bounds(overlap))[idx], dims[idx])
   val nslots    = inslots when inslots > 0 else to-int $ ceil $ dims[idx] / slot-size 
   val num       = to-int $ round $ (to-float(nslots) / 2.0f)
-  val slot-dim  = (dims[idx] / to-float(nslots)) when nslots > 0 else slot-size
+  val slot-dim  = (dims[idx] / to-float(nslots)) when inslots >= 0 else slot-size
+  ;; println-all(["INSLOTS " inslots " NSLOTS " nslots " SLOT-SIZE " slot-size " SLOT-DIM " slot-dim " NUM " num])
   val tdims     = set-elt(V3f-fill(big),  idx, slot-dim)
   val vslot-off = set-elt(V3f-fill(0.0f), idx, (- slot-off))
   val tooth     = cube(tdims)
