@@ -516,10 +516,10 @@ public defn mov<?T> (dp:V3f, s:?T&Poseable) -> T :
 ;;   mov(dx, dy, lit(0.0), f)
 
 public defn degrees-to-radians (d:Float) -> Float :
-  d * 180.0f / to-float(PI-F)
+  d * to-float(PI-F) / 180.0f
 
 public defn radians-to-degrees (a:Float) -> Float :
-  a * to-float(PI-F) / 180.0f
+  a * 180.0f / to-float(PI-F)
 
 public defn rot-x<?T> (d:Float, s:?T&Poseable) -> T :
   xyz(rot-mat44(V3f(1.0f, 0.0f, 0.0f), degrees-to-radians(d)), s)
@@ -724,6 +724,9 @@ public defn box (dims:V3f) -> Shape :
     val d = abs(p) - lit(0.5f * dims)
     min(max(x(d),max(y(d),z(d))),lit(0.0)) + len(max(d,lit(0.0)))  
   Shape(fab, dims-to-box(dims))
+
+public defn box (b:Box) -> Shape :
+  cube(x(lo(b)), y(lo(b)), z(lo(b)), x(hi(b)), y(hi(b)), z(hi(b)))
 
 public defn round-box (dims:V3f, r:Float) -> Shape :
   Shape(fn (p): len(max(abs(p) - lit(0.5) * lit(dims), lit(0.0))) - lit(r), dims-to-box(dims))
@@ -964,16 +967,16 @@ public defn jit (g:Geom) -> Geom :
 public defn slice (z:Float, s:Shape) -> Polygon :
   val bt = jit(s) as BoundedTree
   val bds = Box(xy(lo(bounds(s)) + V3f(0.0f, 0.0f, z)), xy(hi(bounds(s)) + V3f(0.0f, 0.0f, z)))
-  val poly = tree-render-slice(tree(bt), bds, 50.0f)
+  val poly = tree-render-slice(tree(bt), bds, 128.0f)
   poly
 
 public defn save (z:Float, filename:String, s:Shape) -> False :
   val bt = jit(s) as BoundedTree
-  tree-export-slice(tree(bt), filename, bounds(s), 50.0f)
+  tree-export-slice(tree(bt), filename, bounds(s), 128.0f)
 
 public defn save (filename:String, s:Shape) -> False :
   val bt = jit(s) as BoundedTree
-  tree-export-mesh(tree(bt), filename, bounds(s), 50.0f)
+  tree-export-mesh(tree(bt), filename, bounds(s), 128.0f)
 
 ;;;
 
@@ -1004,15 +1007,35 @@ public defn all-combos (a:Seqable<Int>, b:Seqable<Int>) -> Seqable<[Int, Int]> :
       for j in b do :
         yield([i, j])
 
-defn captured? (b1:Box, b2:Box) -> True|False :
+public defn captured-on? (i:Box, a:Box, d:Int) :
   val eps = 0.001f
+  val res = abs(lo(i)[d] - lo(a)[d]) > eps and abs(hi(a)[d] - hi(i)[d]) > eps
+  ;; println-all(["CAPTURED-ON? " i " / " a " D " d " -> " res])
+  res
+
+public defn captured? (b1:Box, b2:Box) -> True|False :
   defn any-captured? (i:Box, a:Box, big-d:Int) :
-    defn captured-on? (i:Box, a:Box, d:Int) :
-      abs(lo(i)[d] - lo(a)[d]) > eps and abs(hi(a)[d] - hi(i)[d]) > eps
-    any?(captured-on?{i, a, _}, filter({ _ != big-d}, 0 to 3))
+    val res = any?(captured-on?{i, a, _}, filter({ _ != big-d}, 0 to 3))
+    ;; println-all(["ANY-CAPTURED? " i " / " a " big-d " big-d " -> " res])
+    res
   val intersection = b1 & b2
   val big-d = max-idx(dims(intersection))
   any-captured?(intersection, b1, big-d) and any-captured?(intersection, b2, big-d)
+
+defn n-smalls (dims:V3f) :
+  val elts = to-tuple $ lazy-qsort(seq(get{dims, _}, 0 to 3))
+  val n    = for d in 1 to 3 count : elts[0] == elts[d]
+  n + 1
+
+public defn captured2d? (b1:Box, b2:Box) -> True|False :
+  if n-smalls(dims(bi & bj)) == 1 :
+    val i = b1 & b2
+    val [d0, d1] = [mid-idx(dims(i)), max-idx(dims(i))]
+    val c0 = (captured-on?(i, b1, d0) and captured-on?(i, b2, d1))
+    val c1 = (captured-on?(i, b1, d1) and captured-on?(i, b2, d0))
+    c0 or c1
+  else :
+    false
 
 public defn join-pieces (elts:Seqable<Shape>,
                          default-slot-info-getter:((Float, Float) -> [Int, Float, Float]),
@@ -1043,6 +1066,66 @@ public defn join-pieces (elts:Seqable<Shape>,
         update(j, nj)
   pieces
 
+defn split-overlap (s0:Shape, s1:Shape, t:Float) :
+  val i = bounds(s0) & bounds(s1)
+  val d = max-idx(dims(bounds(s0)))
+  val o = dims(i)[d] / 3.0f
+  val s0a = s0 & box(Box(lo(bounds(s0)), set-elt(hi(bounds(s0)), d, lo(i)[d] + o)))
+  val s0b = s0 & box(Box(set-elt(lo(bounds(s0)), d, hi(i)[d] - o), hi(bounds(s0))))
+  [s0a s0b]
+
+public defn split-overlaps (elts:Seqable<Shape>, t:Float) -> Seqable<Shape> :
+  val pieces = to-vector<Shape> $ elts
+  ;; println-all(["SPLIT-OVERLAPS IN " length(pieces)])
+  let loop () :
+    val restart? = label<True|False> restart:
+      for i in 0 to length(pieces) do :
+        for j in (i + 1) to length(pieces) do :
+          val [bi, bj] = [bounds(pieces[i]), bounds(pieces[j])]
+          ;; println-all(["I " i " J " j " BI " bi " BJ " bj])
+          if not empty?(bi & bj) :
+            if captured2d?(bi, bj) :
+              val [a, b] = split-overlap(pieces[i], pieces[j], t)
+              ;; println-all([  "  SPLIT " bounds(a) " / " bounds(b)])
+              pieces[i] = a
+              add(pieces, b)
+              restart(true)
+      false
+    if restart? : loop()
+  ;; println-all(["  OUT " length(pieces)])
+  pieces
+
+defn quilt-one (s:Shape, mx:Float, d0:Int, d1:Int, t:Float) -> Seqable<Shape> :
+  val bds   = bounds(s)
+  val dms   = dims(bds)
+  val n = to-int $ round(dms[d0] / (mx + 2.0f * t))
+  val g = dms[d0] / to-float(n)
+  val o = lo(bds)[d0]
+  val [ni, phase] = [1, -0.5f] when d1 == 1 else [0, 0.0f]
+  val res = to-tuple $ for i in 0 to (n + ni) seq :
+    val l = o + ((to-float(i) + phase)     * g - t)
+    val h = o + ((to-float(i + 1) + phase) * g + t)
+    s & box(Box(set-elt(lo(bds), d0, l), set-elt(hi(bds), d0, h)))
+  println-all(["SPLIT MX " mx " D0 " d0 " D1 " d1 " PHASE " phase " -> " to-tuple $ seq(bounds, res)])
+  res
+
+;;; SPLITS BIG PIECES INTO N PIECES ACCORDING TO 
+public defn quilt (shape:Shape, stock-dims:V3f) -> Seqable<Shape> :
+  val t = min(stock-dims)
+  val shape-dims = dims(bounds(shape))
+  val sorted-shape-dims = to-tuple $ lazy-qsort(shape-dims)  
+  val sorted-stock-dims = to-tuple $ lazy-qsort(stock-dims)
+  val cmps = to-tuple $ seq({1 when _ <= _ else 0}, sorted-shape-dims, sorted-stock-dims)
+  val n = reduce(plus, cmps)
+  println-all(["N " n " SHAPE-DIMS " sorted-shape-dims " STOCK-DIMS " sorted-stock-dims " CMPS " cmps])
+  if n == 3 :
+    [ shape ]
+  else if n == 2 :
+    quilt-one(shape, sorted-stock-dims[1], max-idx(shape-dims), mid-idx(shape-dims), t)
+  else :
+    val splits-0 = quilt-one(shape, sorted-stock-dims[2], max-idx(shape-dims), mid-idx(shape-dims), t)
+    to-tuple $ cat-all $ seq(quilt-one{_, sorted-stock-dims[1], mid-idx(shape-dims), max-idx(shape-dims), t}, splits-0)
+
 public defn join-pieces (elts:Seqable<Shape>, num:(Float,Float) -> [Int, Float, Float]) :
   join-pieces(elts, num, [], [])
 
@@ -1069,7 +1152,7 @@ defn segment<?T> (shapes:Seqable<?T>, width:T -> Float, max-width:Float, space:F
 public defn nest (pcs:Seqable<Shape>, size:V3f, space:Float) -> Seq<Layout> :
   val spcs  = to-tuple $ lazy-qsort({ area(dims(bounds(_))) }, pcs)
   val rpcs  = seq(fn (pc): reflect-xy(pc) when max-idx(dims(bounds(pc))) != max-idx(size) else pc, spcs)
-  val rows  = segment(rpcs, { x(dims(bounds(_))) }, x(size), space)
+  val rows  = to-tuple $ segment(rpcs, { x(dims(bounds(_))) }, x(size), space)
   val pages = segment(rows, { y(dims(bounds(union(_)))) }, y(size), space)
   for page in pages seq :
     val lay  = stack-y(join(for row in page seq: Layout(stack-x(seq(Block, join(row, spacer-x(space))))),
