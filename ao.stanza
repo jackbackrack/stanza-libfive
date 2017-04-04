@@ -1104,8 +1104,7 @@ public defn nest (pcs:Seqable<Shape>, size:V3f, space:Float) -> Seq<Assembly> :
   val pages = segment(rows, { y(dims(bounds(union(_)))) }, y(size), space)
   for page in pages seq :
     val rrows = for row in page seq: Assembly(stack-x(join(row, spacer-x(space))))
-    val lay   = stack-y(join(rrows, Assembly([ spacer-y(space) ])))
-    Assembly(cat-all $ seq(children, lay))
+    Assembly(stack-y(join(rrows, Assembly([ spacer-y(space) ]))))
 
 defn num-to-bits (num:Int) -> Tuple<Int> :
   to-tuple $ for i in 2 through 0 by -1 seq : (num >> i) & 1
