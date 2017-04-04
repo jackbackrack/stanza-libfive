@@ -912,19 +912,21 @@ public defn jit (g:Geom) -> Geom :
     (p:Poseable) :  jit-poseable(p)
     (geom) :        geom
 
+public var *resolution* = 64.0f
+
 public defn slice (z:Float, s:Shape) -> Polygon :
   val bt = jit(s) as BoundedTree
   val bds = Box(xy(lo(bounds(s)) + V3f(0.0f, 0.0f, z)), xy(hi(bounds(s)) + V3f(0.0f, 0.0f, z)))
-  val poly = tree-render-slice(tree(bt), bds, 128.0f)
+  val poly = tree-render-slice(tree(bt), bds, *resolution*)
   poly
 
 public defn save (z:Float, filename:String, s:Shape) -> False :
   val bt = jit(s) as BoundedTree
-  tree-export-slice(tree(bt), filename, bounds(s), 128.0f)
+  tree-export-slice(tree(bt), filename, bounds(s), *resolution*)
 
 public defn save (filename:String, s:Shape) -> False :
   val bt = jit(s) as BoundedTree
-  tree-export-mesh(tree(bt), filename, bounds(s), 128.0f)
+  tree-export-mesh(tree(bt), filename, bounds(s), *resolution*)
 
 ;;;
 

@@ -9,7 +9,7 @@ defpackage ao-gfx :
 
 defmethod render (bt:BoundedTree) -> False :
   ;; TODO MAKE PARAMETERIZABLE
-  val mesh = tree-render-mesh(tree(bt), bounds(bt), 64.0f)
+  val mesh = tree-render-mesh(tree(bt), bounds(bt), *resolution*)
   ;; println-all(["MESH: V = " length(vertices(mesh)) " F = " length(faces(mesh))])
   render(mesh)
   ;; gl-push-attrib(GL-CURRENT-BIT)
