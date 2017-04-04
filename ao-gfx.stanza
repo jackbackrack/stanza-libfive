@@ -19,20 +19,13 @@ defmethod render (bt:BoundedTree) -> False :
   ;;   render(point)
   ;; gl-pop-attrib()
 
-defmethod render (lay:TreeLayer) -> False :
+defmethod render (lay:TreeAssembly) -> False :
   gl-push-matrix()
   gl-mult-matrix(mat(lay))
   gl-push-attrib(GL-CURRENT-BIT)
   gl-color4(color(lay))
-  render(tree(lay))
+  for child in trees(lay) do :
+    render(child)
   gl-pop-attrib()
   gl-pop-matrix()
-
-defmethod render (lay:TreeBlock) -> False :
-  for layer in layers(lay) do :
-    render(layer)
-
-defmethod render (lay:TreeLayout) -> False :
-  for block in blocks(lay) do :
-    render(block)
 

@@ -86,8 +86,10 @@ defmethod count (f:FloFieldOp) -> Int :
 
 public deftype Poseable <: Geom
 public defmulti bounds (p:Poseable) -> Box
+public defmulti color (p:Poseable) -> V4f
 public defmulti points (p:Poseable) -> Tuple<V3f>
 public defmulti xyz<?T> (mat:Mat44, p:?T&Poseable) -> T
+public defmulti rgb<?T> (c:V4f, p:?T&Poseable) -> T
 public defmulti shapes (p:Poseable) -> Seqable<Shape>
 
 public defn mov-x<?T> (dx:Float, p:?T&Poseable) -> T : mov(V3f(dx, 0.0f, 0.0f), p)
@@ -96,81 +98,48 @@ public defn mov-z<?T> (dz:Float, p:?T&Poseable) -> T : mov(V3f(0.0f, 0.0f, dz), 
 
 ;;; ASSEMBLIES
 
-public deftype RealPoseable <: Poseable
-public defmulti layers (p:RealPoseable) -> Seqable<Layer>
+public deftype Assembly <: Poseable
+public defmulti children (a:Assembly) -> Seqable<Poseable>
+public defmulti mat (l:Assembly) -> Mat44
 
-public deftype Layer <: RealPoseable
-public defmulti mat (l:Layer) -> Mat44
-public defmulti shape (l:Layer) -> Shape
-public defmulti color (l:Layer) -> V4f
-
-public defn Layer (bounds:Box, mat:Mat44, color:V4f, shape:Shape) :
-  new Layer :
+public defn Assembly (mat:Mat44, color:V4f, poseables:Seqable<Poseable>) -> Assembly :
+  val children = to-tuple $ poseables
+  new Assembly :
+    defmethod children (this) : children
+    defmethod bounds (this) : mat * reduce(bit-or, seq(bounds, children))
     defmethod mat (this) : mat
-    defmethod bounds (this) : bounds
-    defmethod points (this) : points(shape)
-    defmethod shape (this) : shape
     defmethod color (this) : color
-    defmethod layers (this) : [this]
+    defmethod shapes (this) : seq(rgb{color, _}, seq(xyz{mat, _}, cat-all $ seq(shapes, children)))
+    defmethod points (this) : to-tuple $ cat-all $ seq(points, children)
 
-public defn Layer (color:V4f, shape:Shape) :
-  Layer(bounds(shape), id-mat44(), color, shape)
+public defn Assembly (mat:Mat44, poseables:Seqable<Poseable>) -> Assembly :
+  Assembly(mat, V4f(0.0f, 0.0f, 0.0f, 0.0f), poseables)
+  
+public defn Assembly (poseables:Seqable<Poseable>) -> Assembly :
+  Assembly(id-mat44(), poseables)
+  
+public defn Assembly (color:V4f, poseables:Seqable<Poseable>) -> Assembly :
+  Assembly(id-mat44(), color, poseables)
 
-public defmethod xyz (xf:Mat44, p:Layer) -> Layer :
-  Layer(xf * bounds(p), mat(p) * xf, color(p), shape(p))
+defmethod print (s:OutputStream, a:Assembly) :
+  print(s, "Assembly(%,)" % [children(a)])
 
-public defmethod shapes (p:Layer) : [ xyz(mat(p), shape(p)) ]
+public defmethod xyz (xf:Mat44, a:Assembly) -> Assembly :
+  Assembly(mat(a) * xf, color(a), children(a))
 
-public deftype Layoutable <: RealPoseable
-public defmulti blocks (l:Layoutable) -> Seqable<Block>
+public defmethod rgb (c:V4f, a:Assembly) -> Assembly :
+  Assembly(mat(a), color(a), children(a))
 
-public deftype Block <: Layoutable
+public deftype AnyTree <: Geom
 
-public defn Block (layers:Collection<Layer>) :
-  new Block :
-    defmethod bounds (this) : reduce(bit-or, for layer in layers seq: bounds(layer))
-    defmethod layers (this) : layers
-    defmethod blocks (this) : [this]
-    defmethod points (this) : to-tuple $ cat-all $ seq(points, layers)
-
-public defn Block (layers:Seq<Layer>) : Block(to-tuple $ layers)
-public defn Block (color:V4f, shape:Shape) : Block([Layer(color, shape)])
-public defn Block (shape:Shape) : Block(WHITE, shape)
-
-public defmethod xyz (mat:Mat44, b:Block) -> Block :
-  Block(to-tuple $ seq(xyz{mat, _}, layers(b)))
-
-public defmethod shapes (p:Block) : cat-all $ seq(shapes, layers(p))
-
-public deftype Layout <: Layoutable
-
-public defn Layout (elts:Collection<Layoutable>) :
-  new Layout :
-    defmethod bounds (this) : reduce(bit-or, for elt in elts seq: bounds(elt))
-    defmethod blocks (this) : cat-all $ seq(blocks, elts)
-    defmethod points (this) : to-tuple $ cat-all $ seq(points, elts)
-
-public defn Layout (blocks:Seq<Layoutable>) : Layout(to-tuple $ blocks)
-
-public defmethod xyz (mat:Mat44, l:Layout) -> Layout :
-  Layout(to-tuple $ seq(xyz{mat, _}, blocks(l)))
-
-public defmethod shapes (p:Layout) : cat-all(seq(shapes, blocks(p)))
-
-public defstruct BoundedTree <: Geom :
+public defstruct BoundedTree <: AnyTree :
   bounds : Box
   tree:    Tree
 
-public defstruct TreeLayer <: Geom :
+public defstruct TreeAssembly <: AnyTree :
   mat : Mat44
   color : V4f
-  tree : BoundedTree
-
-public defstruct TreeBlock <: Geom :
-  layers : Collection<TreeLayer>
-
-public defstruct TreeLayout <: Geom :
-  blocks : Collection<TreeBlock>
+  trees : Tuple<AnyTree>
 
 ;;; SHAPE
 
@@ -185,6 +154,7 @@ public defn Shape (fabber:(Vec3Field) -> FloField, bounds:Box, points:Tuple<V3f>
     defmethod bounds (this) : bounds
     defmethod points (this) : points
     defmethod cache (this) : cache
+    defmethod shapes (this) : [ this ]
 
 public defn Shape (fabber:(Vec3Field) -> FloField, bounds:Box) :
   Shape(fabber, bounds, [])
@@ -509,6 +479,10 @@ public defn with-xyz (mat:Mat44, f:(Vec3Field) -> Vec3Field, s:Shape) -> Shape :
 public defmethod xyz (mat:Mat44, s:Shape) -> Shape :
   with-xyz(mat, fn (p) : inverse(mat) * p, s)
 
+;; TODO
+public defmethod rgb (c:V4f, s:Shape) -> Shape :
+  s
+
 public defn mov<?T> (dp:V3f, s:?T&Poseable) -> T :
   xyz(mov-mat44(dp), s)
 
@@ -789,9 +763,7 @@ public defn space-z (gdim:Float, shape:Shape) : mag1(gdim / z(dims(bounds(shape)
 
 public defmulti spacer<?T> (g:?T&Poseable, dims:V3f) -> T
 defmethod spacer (g:Shape, gdims:V3f) : Shape(lit{FLOAT-MAX}, Box(dim-min(gdims), dim-max(gdims)))
-defmethod spacer (g:Layer, dims:V3f) : Layer(BLACK, spacer(empty(), dims))
-defmethod spacer (g:Block, dims:V3f) : Block(BLACK, spacer(empty(), dims))
-defmethod spacer (g:Layout, dims:V3f) : Layout([Block(BLACK, spacer(empty(), dims))])
+defmethod spacer (g:Assembly, dims:V3f) : Assembly(BLACK, [ spacer(empty(), dims) ])
 
 public defn spacer-x<?T> (gdim:Float, g:?T&Poseable) : spacer(g, V3f(gdim, 0.0f, 0.0f))
 public defn spacer-y<?T> (gdim:Float, g:?T&Poseable) : spacer(g, V3f(0.0f, gdim, 0.0f))
@@ -841,36 +813,19 @@ public defn Glue (amount:Float) :
     defmethod bounds (this): Box(V3f(0.0f, 0.0f, 0.0f), V3f(0.0f, 0.0f, 0.0f))
     defmethod amount (this): amount
 
-public deftype RealGlue <: AnyGlue & RealPoseable
-defmulti glue (g:RealGlue) -> Glue
+public deftype AssemblyGlue <: AnyGlue & Assembly
+defmulti glue (g:AssemblyGlue) -> Glue
 
-defmethod bounds (g:RealGlue) : bounds(glue(g))
-defmethod amount (g:RealGlue) : amount(glue(g))
-
-public deftype LayerGlue <: RealGlue & Layer
-
-public defn LayerGlue (glue:Glue) :
-  new LayerGlue :
+public defn AssemblyGlue (glue:Glue) :
+  new AssemblyGlue :
     defmethod glue (this) : glue
-    defmethod color (this): V4f(0.0f, 0.0f, 0.0f, 0.0f)
-
-public deftype BlockGlue <: RealGlue & Block
-
-public defn BlockGlue (glue:Glue) :
-  new BlockGlue :
-    defmethod glue (this) : glue
-
-public deftype LayoutGlue <: RealGlue & Layout
-
-public defn LayoutGlue (glue:Glue) :
-  new LayoutGlue :
-    defmethod glue (this) : glue
+    defmethod color (this): BLACK
+    defmethod bounds (this) : bounds(glue)
+    defmethod amount (this) : amount(glue)
 
 public defmulti glue-of<?T> (s:?T&Poseable, a:Float) -> T
 defmethod glue-of (s:Shape, a:Float) -> Shape : Glue(a)
-defmethod glue-of (s:Layer, a:Float) -> Layer : LayerGlue(Glue(a))
-defmethod glue-of (s:Block, a:Float) -> Block : BlockGlue(Glue(a))
-defmethod glue-of (s:Layout, a:Float) -> Layout : LayoutGlue(Glue(a))
+defmethod glue-of (s:Assembly, a:Float) -> Assembly : AssemblyGlue(Glue(a))
 
 defn glue-when<?T> (zero?:True|False, shapes:Seqable<?T&Poseable>) -> Seq<T> :
   generate<T> :
@@ -942,27 +897,20 @@ public defn align-min-z<?T> (shapes:Seqable<?T&Poseable>) -> Seq<T> :
 public defn align-max-z<?T> (shapes:Seqable<?T&Poseable>) -> Seq<T> :
   align-it(shapes, { z(hi(_)) }, mov-z)
 
-defn jit-shape (s:Shape) -> BoundedTree :
+public defmulti jit-poseable (p:Poseable) -> AnyTree
+
+defmethod jit-poseable (s:Shape) -> BoundedTree :
   val e = fab(s, Vec3Field(fab-x(), fab-y(), fab-z()))
   ;; println-all(["E = " e])
   BoundedTree(bounds(s), tree(e))
 
-defn jit-layer (l:Layer) -> TreeLayer :
-  TreeLayer(mat(l), color(l), jit-shape(shape(l)))
-
-defn jit-block (b:Block) -> TreeBlock :
-  TreeBlock(to-tuple $ seq(jit-layer, layers(b)))
-
-defn jit-layout (l:Layout) -> TreeLayout :
-  TreeLayout(to-tuple $ seq(jit-block, blocks(l)))
+defmethod jit-poseable (a:Assembly) -> TreeAssembly :
+  TreeAssembly(mat(a), color(a), to-tuple $ seq(jit-poseable, children(a)))
 
 public defn jit (g:Geom) -> Geom :
   match(g) :
-    (s:Shape) :  jit-shape(s)
-    (l:Layer) :  jit-layer(l)
-    (b:Block) :  jit-block(b)
-    (l:Layout) : jit-layout(l)
-    (geom) :     geom
+    (p:Poseable) :  jit-poseable(p)
+    (geom) :        geom
 
 public defn slice (z:Float, s:Shape) -> Polygon :
   val bt = jit(s) as BoundedTree
@@ -1028,7 +976,7 @@ defn n-smalls (dims:V3f) :
   n + 1
 
 public defn captured2d? (b1:Box, b2:Box) -> True|False :
-  if n-smalls(dims(bi & bj)) == 1 :
+  if n-smalls(dims(b1 & b2)) == 1 :
     val i = b1 & b2
     val [d0, d1] = [mid-idx(dims(i)), max-idx(dims(i))]
     val c0 = (captured-on?(i, b1, d0) and captured-on?(i, b2, d1))
@@ -1149,29 +1097,15 @@ defn segment<?T> (shapes:Seqable<?T>, width:T -> Float, max-width:Float, space:F
       add(row, pc)
     if length(row) > 0 : yield(to-tuple $ row)
 
-public defn nest (pcs:Seqable<Shape>, size:V3f, space:Float) -> Seq<Layout> :
+public defn nest (pcs:Seqable<Shape>, size:V3f, space:Float) -> Seq<Assembly> :
   val spcs  = to-tuple $ lazy-qsort({ area(dims(bounds(_))) }, pcs)
   val rpcs  = seq(fn (pc): reflect-xy(pc) when max-idx(dims(bounds(pc))) != max-idx(size) else pc, spcs)
   val rows  = to-tuple $ segment(rpcs, { x(dims(bounds(_))) }, x(size), space)
   val pages = segment(rows, { y(dims(bounds(union(_)))) }, y(size), space)
   for page in pages seq :
-    val lay  = stack-y(join(for row in page seq: Layout(stack-x(seq(Block, join(row, spacer-x(space))))),
-                       Layout([ Block(spacer-y(space)) ])))
-    Layout(cat-all(seq(blocks, lay)))
-
-;;   val row  = Vector<Shape>()
-;;   val rows = generate<Tuple<Shape>> :
-;;     for pc in spcs do :
-;;       val rpc = reflect-xy(pc) when max-idx(dims(bounds(pc))) != max-idx(size) else pc
-;;       val off = reduce(plus, 0.0f, join(seq({ x(dims(bounds(_))) }, row), space))
-;;       if off > x(size) :
-;;         yield(to-tuple $ row)
-;;         clear(row)
-;;       add(row, rpc)
-;;     if length(row) > 0 : yield(to-tuple $ row)
-;;   val lay = stack-y(join(for row in rows seq: Layout(stack-x(seq(Block, join(row, spacer-x(space))))),
-;;                     Layout([ Block(spacer-y(space)) ])))
-;;   Layout(cat-all(seq(blocks, lay)))
+    val rrows = for row in page seq: Assembly(stack-x(join(row, spacer-x(space))))
+    val lay   = stack-y(join(rrows, Assembly([ spacer-y(space) ])))
+    Assembly(cat-all $ seq(children, lay))
 
 defn num-to-bits (num:Int) -> Tuple<Int> :
   to-tuple $ for i in 2 through 0 by -1 seq : (num >> i) & 1
