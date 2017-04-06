@@ -827,7 +827,7 @@ public defmulti glue-of<?T> (s:?T&Poseable, a:Float) -> T
 defmethod glue-of (s:Shape, a:Float) -> Shape : Glue(a)
 defmethod glue-of (s:Assembly, a:Float) -> Assembly : AssemblyGlue(Glue(a))
 
-defn glue-when<?T> (zero?:True|False, shapes:Seqable<?T&Poseable>) -> Seq<T> :
+public defn glue-when<?T> (zero?:True|False, shapes:Seqable<?T&Poseable>) -> Seq<T> :
   generate<T> :
     for (shape in shapes, i in 0 to false) do :
       if zero? or i != 0: yield(glue-of(shape, 1.0f))
@@ -912,7 +912,7 @@ public defn jit (g:Geom) -> Geom :
     (p:Poseable) :  jit-poseable(p)
     (geom) :        geom
 
-public var *resolution* = 64.0f
+public var *resolution* = 8.0f
 
 public defn slice (z:Float, s:Shape) -> Polygon :
   val bt = jit(s) as BoundedTree
@@ -928,11 +928,11 @@ public defn save (filename:String, s:Shape) -> False :
   val bt = jit(s) as BoundedTree
   tree-export-mesh(tree(bt), filename, bounds(s), *resolution*)
 
-;;;
+;;; PLATES
 
 val big = 1.0e6f
 
-public defn join-pieces (a:Shape, b:Shape, get-slots-info:(Float, Float) -> [Int, Float, Float]) -> [Shape, Shape] :
+public defn join-two-pieces (a:Shape, b:Shape, get-slots-info:(Float, Float) -> [Int, Float, Float]) -> [Shape, Shape] :
   val overlap   = intersection $ [a, b]
   val dims      = dims(bounds(overlap))
   val idx       = max-idx(dims)
@@ -940,7 +940,7 @@ public defn join-pieces (a:Shape, b:Shape, get-slots-info:(Float, Float) -> [Int
   val nslots    = inslots when inslots > 0 else to-int $ ceil $ dims[idx] / slot-size 
   val num       = to-int $ round $ (to-float(nslots) / 2.0f)
   val slot-dim  = (dims[idx] / to-float(nslots)) when inslots >= 0 else slot-size
-  ;; println-all(["INSLOTS " inslots " NSLOTS " nslots " SLOT-SIZE " slot-size " SLOT-DIM " slot-dim " NUM " num])
+  println-all(["INSLOTS " inslots " NSLOTS " nslots " SLOT-SIZE " slot-size " SLOT-DIM " slot-dim " NUM " num])
   val tdims     = set-elt(V3f-fill(big),  idx, slot-dim)
   val vslot-off = set-elt(V3f-fill(0.0f), idx, (- slot-off))
   val tooth     = cube(tdims)
@@ -951,21 +951,26 @@ public defn join-pieces (a:Shape, b:Shape, get-slots-info:(Float, Float) -> [Int
   val pb        = rem(b, pa)
   [pa, pb]
 
+public defn join-two-pieces (a:Shape, b:Shape, num-slots:Int) -> [Shape, Shape] :
+  join-two-pieces(a, b, fn (o:Float, s:Float) : [num-slots 0.0f, 0.0f])
+
 public defn all-combos (a:Seqable<Int>, b:Seqable<Int>) -> Seqable<[Int, Int]> :
   generate<[Int, Int]> :
     for i in a do :
       for j in b do :
         yield([i, j])
 
-public defn captured-on? (i:Box, a:Box, d:Int) :
-  val eps = 0.001f
-  val res = abs(lo(i)[d] - lo(a)[d]) > eps and abs(hi(a)[d] - hi(i)[d]) > eps
+val EPS = 0.001f
+
+public defn full-captured-on? (i:Box, a:Box, d:Int) :
+  ;; val res = abs(lo(i)[d] - lo(a)[d]) > EPS and abs(hi(a)[d] - hi(i)[d]) > EPS
+  val res = (lo(i)[d] - lo(a)[d]) > EPS and (hi(a)[d] - hi(i)[d]) > EPS
   ;; println-all(["CAPTURED-ON? " i " / " a " D " d " -> " res])
   res
 
 public defn captured? (b1:Box, b2:Box) -> True|False :
   defn any-captured? (i:Box, a:Box, big-d:Int) :
-    val res = any?(captured-on?{i, a, _}, filter({ _ != big-d}, 0 to 3))
+    val res = any?(full-captured-on?{i, a, _}, filter({ _ != big-d}, 0 to 3))
     ;; println-all(["ANY-CAPTURED? " i " / " a " big-d " big-d " -> " res])
     res
   val intersection = b1 & b2
@@ -974,16 +979,41 @@ public defn captured? (b1:Box, b2:Box) -> True|False :
 
 defn n-smalls (dims:V3f) :
   val elts = to-tuple $ lazy-qsort(seq(get{dims, _}, 0 to 3))
-  val n    = for d in 1 to 3 count : elts[0] == elts[d]
+  val n    = for d in 1 to 3 count : abs(elts[0] - elts[d]) < EPS
   n + 1
 
-public defn captured2d? (b1:Box, b2:Box) -> True|False :
+public defn full-captured2d? (b1:Box, b2:Box) -> True|False :
   if n-smalls(dims(b1 & b2)) == 1 :
     val i = b1 & b2
     val [d0, d1] = [mid-idx(dims(i)), max-idx(dims(i))]
-    val c0 = (captured-on?(i, b1, d0) and captured-on?(i, b2, d1))
-    val c1 = (captured-on?(i, b1, d1) and captured-on?(i, b2, d0))
+    val c0 = (full-captured-on?(i, b1, d0) and full-captured-on?(i, b2, d1))
+    val c1 = (full-captured-on?(i, b1, d1) and full-captured-on?(i, b2, d0))
     c0 or c1
+  else :
+    false
+
+public defn abutt-captured-on? (a:Box, b:Box, d:Int, dir:Int) :
+  val hi? = lo(b)[d] - lo(a)[d] > EPS and abs(hi(b)[d] - hi(a)[d]) < EPS
+  val lo? = abs(lo(b)[d] - lo(a)[d]) < EPS and hi(a)[d] - hi(b)[d] > EPS
+  val res = lo? when dir == -1 else hi?
+  ;; println-all(["  PARTIAL-CAPTURED-ON? D " d " DIR " dir " A " a " B " b " RES " res])
+  res
+
+public defn abutt-captured-on? (a:Box, b:Box, d:Int) :
+  val res = (lo(b)[d] - lo(a)[d]) > (- EPS) and (hi(a)[d] - hi(b)[d]) > (- EPS)
+  ;; println-all(["  PARTIAL-CAPTURED-ON? D " d " A " a " B " b " RES " res])
+  res
+
+public defn abutt-captured2d? (b1:Box, b2:Box) -> True|False :
+  val i = b1 & b2
+  if n-smalls(dims(i)) == 1 :
+    val [d0, d1] = [mid-idx(dims(i)), max-idx(dims(i))]
+    val c0 = (abutt-captured-on?(b1, b2, d0) or abutt-captured-on?(b2, b1, d0))
+    val c1 = (abutt-captured-on?(b1, b2, d1) or abutt-captured-on?(b2, b1, d1))
+    ;; println-all(["ABUTT-CAPTURED2D? DIMS(i) " dims(i) " N-SMALLS " n-smalls(dims(i)) " C0 " c0 " C1 " c1 " RES " (c0 and c1)])
+    ;; println-all(["ABUTT-CAPTURED2D? C " c])
+    c0 and c1
+    ;; c
   else :
     false
 
@@ -1005,18 +1035,21 @@ public defn join-pieces (elts:Seqable<Shape>,
       if i == k :
         println-all(["SAME UPDATE " j " <- " i])
         pieces[j] = pieces[j] & mov(d, pieces[i])
-  for i in 0 to length(pieces) do :
-    for j in (i + 1) to length(pieces) do :
-      val [bi, bj] = [bounds(pieces[i]), bounds(pieces[j])]
-      if not empty?(bi & bj) :
-        val num = (fn (o:Float,s:Float) : [2, 0.0f, 0.0f]) when captured?(bi, bj) else lookup-slot-info-getter(i, j)
-        println-all(["I " i " J " j " NUM " num])
-        val [ni, nj] = join-pieces(pieces[i], pieces[j], num)
-        update(i, ni)
-        update(j, nj)
+  defn run (ok?:(Box, Box) -> True|False, slot-info-getter:(Int, Int) -> ((Float, Float) -> [Int, Float, Float])) :
+    for i in 0 to length(pieces) do :
+      for j in (i + 1) to length(pieces) do : 
+        val [bi, bj] = [bounds(pieces[i]), bounds(pieces[j])]
+        if not empty?(bi & bj) :
+          if ok?(bi, bj) :
+            ;; print-all(["I " i " J " j " "])
+            val [ni, nj] = join-two-pieces(pieces[i], pieces[j], slot-info-getter(i, j))
+            update(i, ni)
+            update(j, nj)
+  run({ not captured?(_, _) }, lookup-slot-info-getter{_, _})
+  run(captured?, fn (i:Int, j:Int) : (fn (o:Float,s:Float) : [2, 0.0f, 0.0f]))
   pieces
 
-defn split-overlap (s0:Shape, s1:Shape, t:Float) :
+defn split-full-overlap (s0:Shape, s1:Shape, t:Float) -> [Shape, Shape] :
   val i = bounds(s0) & bounds(s1)
   val d = max-idx(dims(bounds(s0)))
   val o = dims(i)[d] / 3.0f
@@ -1024,9 +1057,32 @@ defn split-overlap (s0:Shape, s1:Shape, t:Float) :
   val s0b = s0 & box(Box(set-elt(lo(bounds(s0)), d, hi(i)[d] - o), hi(bounds(s0))))
   [s0a s0b]
 
+defn split-abutt-overlap (i0:Int, s0:Shape, i1:Int, s1:Shape, t:Float) -> [Int, Shape] :
+  val i   = bounds(s0) & bounds(s1)
+  val d0  = mid-idx(dims(i))
+  val d1  = max-idx(dims(i))
+  ;; println-all(["SHAPES S0 " bounds(s0) " S1 " bounds(s1)])
+  val [dir, d, k, s] = label<[Int, Int, Int, Shape]> return :
+    for (a in [s0, s1], b in [s1, s0], k in [i0, i1]) do :
+      for d in [d0, d1] do :
+        for dir in [-1, 1] do :
+          if abutt-captured-on?(bounds(a), bounds(b), d, dir) :
+            ;; println-all(["FOUND ABUTTMENT D " d " DIR " dir " K " k])
+            return([dir, d, k, a])
+    println-all(["FAILED TO FIND ABUTTMENT"])
+    ;; ASSERT FAILURE
+    [-1, d0, i0, s0]
+  val o   = dims(i)[d] / 3.0f
+  val nsh = s & box(Box(lo(bounds(s)), set-elt(hi(bounds(s)), d, lo(i)[d] + o)))
+  val nsl = s & box(Box(set-elt(lo(bounds(s)), d, hi(i)[d] - o), hi(bounds(s))))
+  val ns  = nsl when dir == -1 else nsh
+  [k, ns]
+
 public defn split-overlaps (elts:Seqable<Shape>, t:Float) -> Seqable<Shape> :
   val pieces = to-vector<Shape> $ elts
-  ;; println-all(["SPLIT-OVERLAPS IN " length(pieces)])
+  println-all(["SPLIT-OVERLAPS IN " length(pieces)])
+  for (i in 0 to false, piece in pieces) do :
+    println-all([i "  " bounds(piece)])
   let loop () :
     val restart? = label<True|False> restart:
       for i in 0 to length(pieces) do :
@@ -1034,11 +1090,17 @@ public defn split-overlaps (elts:Seqable<Shape>, t:Float) -> Seqable<Shape> :
           val [bi, bj] = [bounds(pieces[i]), bounds(pieces[j])]
           ;; println-all(["I " i " J " j " BI " bi " BJ " bj])
           if not empty?(bi & bj) :
-            if captured2d?(bi, bj) :
-              val [a, b] = split-overlap(pieces[i], pieces[j], t)
-              ;; println-all([  "  SPLIT " bounds(a) " / " bounds(b)])
+            ;; println-all(["CHECKING " i " AND " j])
+            if full-captured2d?(bi, bj) :
+              val [a, b] = split-full-overlap(pieces[i], pieces[j], t)
+              println-all([  "  FULL SPLIT " bounds(a) " / " bounds(b)])
               pieces[i] = a
               add(pieces, b)
+              restart(true)
+            else if abutt-captured2d?(bi, bj) :
+              val [k, a] = split-abutt-overlap(i, pieces[i], j, pieces[j], t)
+              println-all([  "  ABUTT SPLIT K " k " " pieces[k] " -> " bounds(a)])
+              pieces[k] = a
               restart(true)
       false
     if restart? : loop()
@@ -1155,4 +1217,3 @@ public defn all-forms () :
       ;; println-all(["I " i " CNUM " cnum " BITZ " bitz " CBITZ " cbitz " CK? " ck? " OK? " ok? " KEY? " key?(forms, cnum)])
       forms[cnum] = cbitz
   forms
-
