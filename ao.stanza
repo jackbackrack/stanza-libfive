@@ -932,6 +932,8 @@ public defn save (filename:String, s:Shape) -> False :
 
 ;;; PLATES
 
+public var *explosion* = 0.25f
+
 public defn weld (i-a-shapes:Seqable<Shape>, i-b-shapes:Seqable<Shape>) -> Seqable<Shape> :
   val [a-shapes, b-shapes] = [to-tuple $ i-a-shapes, to-tuple $ i-b-shapes]
   println-all(["WELDING " length(a-shapes) + length(b-shapes)])
@@ -1036,7 +1038,7 @@ public defn abutt-captured-on? (a:Box, b:Box, d:Int, dir:Int) :
 
 public defn abutt-captured-on? (a:Box, b:Box, d:Int) :
   val res = (lo(b)[d] - lo(a)[d]) > (- EPS) and (hi(a)[d] - hi(b)[d]) > (- EPS)
-  println-all(["  PARTIAL-CAPTURED-ON? D " d " A " a " B " b " RES " res])
+  ;; println-all(["  PARTIAL-CAPTURED-ON? D " d " A " a " B " b " RES " res])
   res
 
 public defn abutt-captured2d? (b1:Box, b2:Box) -> True|False :
@@ -1045,7 +1047,7 @@ public defn abutt-captured2d? (b1:Box, b2:Box) -> True|False :
     val [d0, d1] = [mid-idx(dims(i)), max-idx(dims(i))]
     val c0 = (abutt-captured-on?(b1, b2, d0) or abutt-captured-on?(b2, b1, d0))
     val c1 = (abutt-captured-on?(b1, b2, d1) or abutt-captured-on?(b2, b1, d1))
-    println-all(["ABUTT-CAPTURED2D? DIMS(i) " dims(i) " N-SMALLS " n-smalls(dims(i)) " C0 " c0 " C1 " c1 " RES " (c0 and c1)])
+    ;; println-all(["ABUTT-CAPTURED2D? DIMS(i) " dims(i) " N-SMALLS " n-smalls(dims(i)) " C0 " c0 " C1 " c1 " RES " (c0 and c1)])
     ;; println-all(["ABUTT-CAPTURED2D? C " c])
     c0 and c1
     ;; c
