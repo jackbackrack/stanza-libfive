@@ -14,6 +14,7 @@ extern tree_const: (float) -> ptr<?>
 extern tree_unary: (int, ptr<?>) -> ptr<?>
 extern tree_binary: (int, ptr<?>, ptr<?>) -> ptr<?>
 extern opcode_enum: (ptr<?>) -> int
+extern tree_delete: (ptr<?>) -> int
 extern tree_export_slice: (ptr<?>, ptr<?>, float, float, float, float, float, float) -> int
 extern tree_export_mesh: (ptr<?>, ptr<?>, float, float, float, float, float, float, float) -> int
 ;; extern tree_render_mesh: (ptr<?>, ptr<ptr<float>>, float, float, float, float, float, float, float) -> int
@@ -55,6 +56,19 @@ defn lit? (f:FloField, v:Float) -> True|False :
   match(f):
   (l:FloFieldLit) : value(l) == v
   (o:FloFieldOp) : false
+
+defn op? (f:FloField, name:String) -> True|False :
+  match(f):
+  (l:FloFieldLit) : false
+  (o:FloFieldOp) : name == op(o)
+
+defn op-args (f:FloField) -> List<FloField> :
+  match(f):
+  (l:FloFieldLit) : List()
+  (o:FloFieldOp) : args(o)
+
+defn op-arg0 (f:FloField) -> FloField : op-args(f)[0]
+defn op-arg1 (f:FloField) -> FloField : op-args(f)[1]
 
 defn lit-value (f:FloField) -> Float :
   match(f):
@@ -133,11 +147,16 @@ public defmethod rgb (c:V4f, a:Assembly) -> Assembly :
 public deftype AnyTree <: Geom
 
 public defstruct BoundedTree <: AnyTree :
-  bounds : Box
-  tree:    Tree
+  shape: Shape
+  field: FloField
+
+public defn bounds (t:BoundedTree) : bounds(shape(t))
+public defn tree (t:BoundedTree) : tree(field(t))
+public defn mesh (t:BoundedTree) : mesh(shape(t))
+public defn set-mesh (t:BoundedTree, m:Mesh) : set-mesh(shape(t), m)
 
 public defstruct TreeAssembly <: AnyTree :
-  mat : Mat44
+  mat   : Mat44
   color : V4f
   trees : Tuple<AnyTree>
 
@@ -146,15 +165,20 @@ public defstruct TreeAssembly <: AnyTree :
 public deftype Shape <: Poseable
 public defmulti fabber (s:Shape) -> ((Vec3Field) -> FloField)
 public defmulti cache (s:Shape) -> HashTable<Vec3Field,FloField>
+public defmulti mesh (s:Shape) -> False|Mesh
+public defmulti set-mesh (s:Shape, m:Mesh) -> False
 
 public defn Shape (fabber:(Vec3Field) -> FloField, bounds:Box, points:Tuple<V3f>) :
   val cache = HashTable<Vec3Field,FloField>()
+  var mesh:False|Mesh = false
   new Shape :
     defmethod fabber (this) : fabber
     defmethod bounds (this) : bounds
     defmethod points (this) : points
     defmethod cache (this) : cache
     defmethod shapes (this) : [ this ]
+    defmethod mesh (this) : mesh
+    defmethod set-mesh (this, m:Mesh) : mesh = m
 
 public defn Shape (fabber:(Vec3Field) -> FloField, bounds:Box) :
   Shape(fabber, bounds, [])
@@ -179,20 +203,25 @@ defmethod print (s:OutputStream, o:Shape) :
   print-all(s, ["Shape(" bounds(o) ")"])
 
 defn fab (s:Shape, p:Vec3Field) -> FloField :
-  if key?(cache(s), p) :
-    cache(s)[p]
-  else :
-    val f = fabber(s)(p)
-    cache(s)[p] = f
-    ;; if length(cache(s)) > 1 :
-    ;;   println-all(["MISS " to-tuple $ keys(cache(s))])
-    f
+  fabber(s)(p)
+  ;; if key?(cache(s), p) :
+  ;;   cache(s)[p]
+  ;; else :
+  ;;   val f = fabber(s)(p)
+  ;;   cache(s)[p] = f
+  ;;   ;; if length(cache(s)) > 1 :
+  ;;   ;;   println-all(["MISS " to-tuple $ keys(cache(s))])
+  ;;   f
 
 public defn Shape (s:Shape, bounds:Box, points:Tuple<V3f>) :
   Shape(fabber(s), bounds)
 
 public defn Shape (s:Shape, bounds:Box) :
   Shape(s, bounds, [])
+
+public lostanza defn tree-delete (t:ref<Tree>) -> ref<False> :
+  call-c tree_delete(t.value)
+  return false
 
 public lostanza defn tree-export-mesh (t:ref<Tree>, filename:ref<String>, box:ref<Box>, res:ref<Float>) -> ref<False> :
   call-c tree_export_mesh(t.value, addr!(filename.chars), x(lo(box)).value, x(hi(box)).value, y(lo(box)).value, y(hi(box)).value, z(lo(box)).value, z(hi(box)).value, res.value)
@@ -331,10 +360,20 @@ public defn divide (x:FloField, y:FloField) -> FloField :
   else : lit(0.0f)
 public defn plus (x:FloField, y:FloField) -> FloField :
   if lit?(x) and lit?(y): lit(plus(lit-value(x), lit-value(y)))
-  else if lit?(x, 0.0f): y else if lit?(y, 0.0f): x else : binary("add", x, y)
+  else if lit?(x, 0.0f): y else if lit?(y, 0.0f): x
+  else if lit?(x) and op?(y, "add") and lit?(op-arg1(y)) : op-arg0(y) + lit(lit-value(x) + lit-value(op-arg1(y))) ;; add(lx, add(y, ly)) = add(y, lx + ly)
+  else if lit?(x) and op?(y, "sub") and lit?(op-arg1(y)) : op-arg0(y) + lit(lit-value(x) - lit-value(op-arg1(y))) ;; add(lx, sub(y, ly)) = add(y, lx - ly)
+  else if lit?(y) and op?(x, "add") and lit?(op-arg1(x)) : op-arg0(x) + lit(lit-value(op-arg1(x)) + lit-value(y)) ;; add(add(x, lx), ly) = add(x, lx + ly)
+  else if lit?(y) and op?(x, "sub") and lit?(op-arg1(x)) : op-arg0(x) + lit(lit-value(y) - lit-value(op-arg1(x))) ;; add(sub(x, lx), ly) = add(x, ly - lx)
+  else : binary("add", x, y)
 public defn minus (x:FloField, y:FloField) -> FloField : 
   if lit?(x) and lit?(y): lit(minus(lit-value(x), lit-value(y)))
-  else if lit?(y, 0.0f): x else : binary("sub", x, y)
+  else if lit?(y, 0.0f): x
+  else if lit?(x) and op?(y, "add") and lit?(op-arg1(y)) : lit(lit-value(x) - lit-value(op-arg1(y))) - op-arg0(y) ;; sub(lx, add(y, ly)) = sub(lx - ly, y)
+  else if lit?(x) and op?(y, "sub") and lit?(op-arg1(y)) : lit(lit-value(x) + lit-value(op-arg1(y))) - op-arg0(y) ;; sub(lx, sub(y, ly)) = sub(lx + ly, y)
+  else if lit?(y) and op?(x, "add") and lit?(op-arg1(x)) : op-arg0(x) + lit(lit-value(op-arg1(x)) - lit-value(y)) ;; sub(add(x, lx), ly) = sub(x, lx - ly)
+  else if lit?(y) and op?(x, "sub") and lit?(op-arg1(x)) : op-arg0(x) - lit(lit-value(y) + lit-value(op-arg1(x))) ;; sub(sub(x, lx), ly) = sub(x, lx + ly)
+  else : binary("sub", x, y)
 public defn atan2 (x:FloField, y:FloField) -> FloField :
   if lit?(x) and lit?(y): lit(atan2(lit-value(x), lit-value(y)))
   else if lit?(x) and lit?(y): lit(atan2(lit-value(x), lit-value(y))) else: binary("atan2", x, y)
@@ -498,13 +537,13 @@ public defn radians-to-degrees (a:Float) -> Float :
   a * 180.0f / to-float(PI-F)
 
 public defn rot-x<?T> (d:Float, s:?T&Poseable) -> T :
-  xyz(rot-mat44(V3f(1.0f, 0.0f, 0.0f), degrees-to-radians(d)), s)
+  xyz(rot-mat44(V3f(degrees-to-radians(d), 0.0f, 0.0f)), s)
 
 public defn rot-y<?T> (d:Float, s:?T&Poseable) -> T :
-  xyz(rot-mat44(V3f(0.0f, 1.0f, 0.0f), degrees-to-radians(d)), s)
+  xyz(rot-mat44(V3f(0.0f, degrees-to-radians(d), 0.0f)), s)
 
 public defn rot-z<?T> (d:Float, s:?T&Poseable) -> T :
-  xyz(rot-mat44(V3f(0.0f, 0.0f, 1.0f), degrees-to-radians(d)), s)
+  xyz(rot-mat44(V3f(0.0f, 0.0f, degrees-to-radians(d))), s)
 
 public defn reflect-x<?T> (s:?T&Poseable) -> T : xyz(mag-mat44(V3f(-1.0f, 1.0f, 1.0f)), s)
 
@@ -657,7 +696,8 @@ public defn edge (v0:V3f, v1:V3f) -> Shape :
 public defn convex (pts:Tuple<V3f>) -> Shape :
   val edges = for i in 0 to length(pts) seq :
                 edge(pts[i], pts[(i + 1) % length(pts)])
-  reduce(fn (a:Shape, b:Shape): a & b, edges)
+  val shape = reduce(fn (a:Shape, b:Shape): a & b, edges)
+  Shape(fabber(shape), reduce(bit-or, seq(Box, pts)))
 
 public defn to-field2 (m:Mesh) -> Shape :
   val verts = vertices(m)
@@ -705,7 +745,10 @@ public defn box (b:Box) -> Shape :
   cube(x(lo(b)), y(lo(b)), z(lo(b)), x(hi(b)), y(hi(b)), z(hi(b)))
 
 public defn round-box (dims:V3f, r:Float) -> Shape :
-  Shape(fn (p): len(max(abs(p) - lit(0.5) * lit(dims), lit(0.0))) - lit(r), dims-to-box(dims))
+  defn fab (p) :
+    val d = abs(p) - lit(0.5f * dims)
+    len(max(d, lit(0.0))) - lit(r)
+  Shape(fab, fatten(dims-to-box(dims), r))
 
 public defn cylinder (d:Float, h:Float) -> Shape :
   extrude(h, circle(d))
@@ -759,9 +802,9 @@ public defn space (gdims:V3f, shape:Shape) :
 public defn empty () : Shape(lit{pos-inf}, min-box())
 public defn full () : Shape(lit{neg-inf}, inf-box())
 
-public defn space-x (gdim:Float, shape:Shape) : mag1(gdim / x(dims(bounds(shape))), shape)
-public defn space-y (gdim:Float, shape:Shape) : mag1(gdim / y(dims(bounds(shape))), shape)
-public defn space-z (gdim:Float, shape:Shape) : mag1(gdim / z(dims(bounds(shape))), shape)
+;; public defn space-x (gdim:Float, shape:Shape) : mag1(gdim / x(dims(bounds(shape))), shape)
+;; public defn space-y (gdim:Float, shape:Shape) : mag1(gdim / y(dims(bounds(shape))), shape)
+;; public defn space-z (gdim:Float, shape:Shape) : mag1(gdim / z(dims(bounds(shape))), shape)
 
 public defmulti spacer<?T> (g:?T&Poseable, dims:V3f) -> T
 defmethod spacer (g:Shape, gdims:V3f) : Shape(lit{pos-inf}, Box(dim-min(gdims), dim-max(gdims)))
@@ -829,10 +872,11 @@ public defmulti glue-of<?T> (s:?T&Poseable, a:Float) -> T
 defmethod glue-of (s:Shape, a:Float) -> Shape : Glue(a)
 defmethod glue-of (s:Assembly, a:Float) -> Assembly : AssemblyGlue(Glue(a))
 
-public defn glue-when<?T> (zero?:True|False, shapes:Seqable<?T&Poseable>) -> Seq<T> :
+public defn glue-when<?T> (first?:True|False, shapes:Seqable<?T&Poseable>) -> Seq<T> :
   generate<T> :
     for (shape in shapes, i in 0 to false) do :
-      if zero? or i != 0: yield(glue-of(shape, 1.0f))
+      if first? or i > 0:
+        yield(glue-of(shape, 1.0f))
       yield(shape)
 
 public defn glue-even<?T> (shapes:Seqable<?T&Poseable>) -> Seq<T> :
@@ -867,6 +911,21 @@ public defn stack-y<?T> (h:Float, shapes:Seqable<?T&Poseable>) -> Seq<T> :
 
 public defn stack-z<?T> (d:Float, shapes:Seqable<?T&Poseable>) -> Seq<T> :
   stack-z(assign-glue-idx(shapes, d, 2))
+
+public defn space-idx<?T> (iseps:Seqable<Float>, idx:Int, shapes:Seqable<?T&Poseable>) -> Seq<T> :
+  val seps = to-tuple $ iseps
+  val tot = reduce(plus, seps)
+  val start = -0.5f * tot
+  val offs = generate<Float> :
+    let loop (off = start, i = 0) :
+      yield(off)
+      if i < length(seps) : loop(off + seps[i], i + 1)
+  for (shape in shapes, off in offs) seq :
+    mov(off * V3f-unit(idx), shape)
+
+public defn space-x<?T> (seps:Seqable<Float>, shapes:Seqable<?T&Poseable>) : space-idx(seps, 0, shapes)
+public defn space-y<?T> (seps:Seqable<Float>, shapes:Seqable<?T&Poseable>) : space-idx(seps, 1, shapes)
+public defn space-z<?T> (seps:Seqable<Float>, shapes:Seqable<?T&Poseable>) : space-idx(seps, 2, shapes)
 
 defn align-it<?T> (ishapes:Seqable<?T&Poseable>, value:(Box) -> Float, mov:(Float, T) -> T) -> Seq<T> :
   val shapes = to-tuple(ishapes)
@@ -903,8 +962,8 @@ public defmulti jit-poseable (p:Poseable) -> AnyTree
 
 defmethod jit-poseable (s:Shape) -> BoundedTree :
   val e = fab(s, Vec3Field(fab-x(), fab-y(), fab-z()))
-  ;; println-all(["E = " e])
-  BoundedTree(bounds(s), tree(e))
+  ;; println-all(["E = " count(e)])
+  BoundedTree(s, e)
 
 defmethod jit-poseable (a:Assembly) -> TreeAssembly :
   TreeAssembly(mat(a), color(a), to-tuple $ seq(jit-poseable, children(a)))
@@ -919,7 +978,9 @@ public var *resolution* = 8.0f
 public defn slice (z:Float, s:Shape) -> Polygon :
   val bt = jit(s) as BoundedTree
   val bds = Box(xy(lo(bounds(s)) + V3f(0.0f, 0.0f, z)), xy(hi(bounds(s)) + V3f(0.0f, 0.0f, z)))
+  val start = current-time-ms()
   val poly = tree-render-slice(tree(bt), bds, *resolution*)
+  ;; println-all(["RENDER-SLICE = " to-float(current-time-ms() - start) * 0.001f])
   poly
 
 public defn save (z:Float, filename:String, s:Shape) -> False :
@@ -936,7 +997,7 @@ public var *explosion* = 0.25f
 
 public defn weld (i-a-shapes:Seqable<Shape>, i-b-shapes:Seqable<Shape>) -> Seqable<Shape> :
   val [a-shapes, b-shapes] = [to-tuple $ i-a-shapes, to-tuple $ i-b-shapes]
-  println-all(["WELDING " length(a-shapes) + length(b-shapes)])
+  ;; println-all(["WELDING " length(a-shapes) + length(b-shapes)])
   defn overlap? (a:Shape, b:Shape) -> True|False :
     val i = fatten(bounds(a) & bounds(b), EPS)
     val res = not empty?(i) and max(dims(i)) > (min(dims(bounds(a))) * 1.1f)
@@ -945,20 +1006,20 @@ public defn weld (i-a-shapes:Seqable<Shape>, i-b-shapes:Seqable<Shape>) -> Seqab
   val res = to-tuple $ generate<Shape> :
     val bs-mated? = HashTable<Int, Int>()
     for (a in a-shapes, i in 0 to false) do :
-      println-all(["WELD I " i " DIMS " dims(bounds(a))])
+      ;; println-all(["WELD I " i " DIMS " dims(bounds(a))])
       val mates = to-tuple $ generate<Shape> :
         for (b in b-shapes, j in 0 to false) do :
-          print-all(["CONSIDERING " i " / " j ": "])
+          ;; print-all(["CONSIDERING " i " / " j ": "])
           if overlap?(a, b) and not key?(bs-mated?, j) :
             yield(b)
             bs-mated?[j] = j
-      println-all(["MATES " length(mates)])
+      ;; println-all(["MATES " length(mates)])
       yield(a | union(mates))
     for (b in b-shapes, j in 0 to false) do :
       if not key?(bs-mated?, j) :
-        println-all(["EXTRA B " j])
+        ;; println-all(["EXTRA B " j])
         yield(b)
-  println-all(["WELDING " length(res) " TOTAL"])
+  ;; println-all(["WELDING " length(res) " TOTAL"])
   res
 
 public defn weld (a-shapes:Poseable, b-shapes:Poseable) -> Seqable<Shape> :
@@ -967,29 +1028,96 @@ public defn weld (a-shapes:Poseable, b-shapes:Poseable) -> Seqable<Shape> :
 public defn weld (poseables:Seqable<Poseable>) -> Seqable<Shape> :
   reduce(weld, seq(shapes, poseables))
 
-public defn join-two-pieces (a:Shape, b:Shape, get-slots-info:(Float, Float) -> [Int, Float, Float]) -> [Shape, Shape] :
-  val i         = bounds(a) & bounds(b)
-  val dims      = dims(i)
-  val idx       = max-idx(dims)
-  val [inslots, slot-off, slot-size] = get-slots-info(lo(i)[idx], dims[idx])
-  val nslots    = inslots when inslots > 0 else to-int $ ceil $ dims[idx] / slot-size 
-  val num       = to-int $ round $ (to-float(nslots) / 2.0f)
-  val slot-dim  = (dims[idx] / to-float(nslots)) when inslots >= 0 else slot-size
-  val tdims     = set-elt(V3f-fill(pos-inf),  idx, slot-dim)
-  println-all(["INSLOTS " inslots " NSLOTS " nslots " SLOT-SIZE " slot-size " SLOT-DIM " slot-dim " NUM " num " TDIMS " tdims[idx]])
-  val vslot-off = set-elt(V3f-fill(0.0f), idx, (- slot-off))
-  val tooth     = cube(tdims)
-  val tooths    = union $ stack-idx(slot-dim * to-float(nslots), idx, glue-when(nslots % 2 == 0, seq({ tooth }, 0 to num)))
-  ;; println-all(["NUM " num " NSLOTS " nslots " IDX " idx " DIMS " dims " TDIMS " tdims[idx]])
+public defn square-tooth (i:Box, n-slots:Int) -> Shape :
+  val idx       = max-idx(dims(i))
+  val max-dim   = dims(i)[idx]
+  val slot-dim  = max-dim / to-float(n-slots)
+  cube(V3f(slot-dim, pos-inf, pos-inf))
+
+public defn saw-tooth (i:Box, n-slots:Int) -> Shape :
+  val idx       = max-idx(dims(i))
+  val max-dim   = dims(i)[idx]
+  val slot-dim  = max-dim / to-float(n-slots)
+  val num       = to-int $ round $ (to-float(n-slots) / 2.0f)
+  val xr        = 0.5f * max-dim / to-float(num)
+  val yr        = dims(i)[mid-idx(dims(i))]
+  val zd        = dims(i)[min-idx(dims(i))]
+  extrude(zd, triangle(V2f(xr, (- yr)), V2f(0.0f, yr), V2f((- xr), (- yr))))
+
+public defn get-even-teeth (i:Box, get-tooth:(Box, Int) -> Shape, i-n-slots:Int, slot-size:Float) -> Shape :
+  val idx       = max-idx(dims(i))
+  val max-dim   = dims(i)[idx]
+  val n-slots   = i-n-slots when i-n-slots > 0 else (((to-int $ floor $ max-dim / slot-size) / 2) * 2 + 1)
+  val num       = to-int $ round $ (to-float(n-slots) / 2.0f)
+  val stooth    = square-tooth(i, n-slots)
+  val tooth     = get-tooth(i, n-slots)
+  defn gen-tooth (n:Int) : stooth when n == 0 or n == (num - 1) else tooth
+  val teeth     = to-tuple $ seq(gen-tooth, 0 to num)
+  val glued-teeth = to-tuple $ glue-when(n-slots % 2 == 0, teeth)
+  ;; println-all(["N-SLOTS " n-slots " NUM " num " N-TEETH " length(teeth) " GLUED-TEETH " length(glued-teeth)])
+  union $ stack-x(max-dim, glued-teeth)
+  ;; println-all(["N-SLOTS " n-slots " DIMS " dims(i) " MAX-IDX " idx " SLOT-DIM " slot-dim " CTRI " center(i) " TDIMS " dims(bounds(tooths))])
+
+public defn get-square-teeth (i:Box, n-slots:Int, slot-size:Float) :
+  get-even-teeth(i, square-tooth, n-slots, slot-size)
+
+public defn get-square-teeth (i:Box, slot-size:Float) : get-square-teeth(i, 0, slot-size)
+public defn get-square-teeth (i:Box, n-slots:Int) : get-square-teeth(i, n-slots, 0.0f)
+
+defn rot-mat44 (src:V3f, dst:V3f) -> Mat44 :
+  if src == dst :
+    ;; println-all(["ROT NONE"])
+    id-mat44()
+  else :
+    val idx = min-idx(src + dst)
+    ;; println-all(["ROT " idx])
+    if idx == 0 :
+      reflect-yz-mat44()
+    else if idx == 1 :
+      reflect-xz-mat44()
+    else : ;; if idx == 2 :
+      reflect-xy-mat44()
+
+defn rot-mat44 (src0:V3f, src1:V3f, dst0:V3f, dst1:V3f) -> Mat44 :
+  val mat0 = rot-mat44(src0, dst0)
+  val mat1 = rot-mat44(mat0 * src1, dst1)
+  mat0 * mat1
+
+defn rot-mat44 (src0:Int, src1:Int, dst0:Int, dst1:Int) -> Mat44 :
+  ;; println-all(["ROT-MAT44 S0 " src0 " S1 " src1 " D0 " dst0 " D1 " dst1])
+  rot-mat44(V3f-unit(src0), V3f-unit(src1), V3f-unit(dst0), V3f-unit(dst1))
+
+public defn join-two-pieces (a:Shape, b:Shape, get-teeth:Box -> Shape) -> [Shape, Shape] :
+  val i         = fatten(bounds(a) & bounds(b), EPS)
   val overlap   = box(i)
-  val teeth     = overlap & mov(center(i) + vslot-off, tooths)
+  val raw-teeth = get-teeth(i)
+  val xform     = rot-mat44(0, 2, max-idx(dims(i)), min-idx(dims(bounds(a)))) * mov-mat44(center(i))
+  val teeth     = overlap & xyz(xform, raw-teeth)
   val pa        = rem(a, teeth)
   val neg-teeth = rem(overlap, teeth)
   val pb        = rem(b, neg-teeth)
   [pa, pb]
 
-public defn join-two-pieces (a:Shape, b:Shape, num-slots:Int) -> [Shape, Shape] :
-  join-two-pieces(a, b, fn (o:Float, s:Float) : [num-slots 0.0f, 0.0f])
+;; public defn join-two-pieces (a:Shape, b:Shape, get-slots-info:(Float, Float) -> [Int, Float, Float]) -> [Shape, Shape] :
+;;   val i         = fatten(bounds(a) & bounds(b), EPS)
+;;   val dims      = dims(i)
+;;   val idx       = max-idx(dims)
+;;   val [inslots, slot-off, slot-size] = get-slots-info(lo(i)[idx], dims[idx])
+;;   val nslots    = inslots when inslots > 0 else to-int $ ceil $ dims[idx] / slot-size 
+;;   val num       = to-int $ round $ (to-float(nslots) / 2.0f)
+;;   val slot-dim  = (dims[idx] / to-float(nslots)) when inslots >= 0 else slot-size
+;;   val tdims     = set-elt(V3f-fill(pos-inf),  idx, slot-dim)
+;;   println-all(["INSLOTS " inslots " NSLOTS " nslots " SLOT-SIZE " slot-size " SLOT-DIM " slot-dim " NUM " num " TDIMS " tdims[idx]])
+;;   val vslot-off = set-elt(V3f-fill(0.0f), idx, (- slot-off))
+;;   val tooth     = cube(tdims)
+;;   val tooths    = union $ stack-idx(slot-dim * to-float(nslots), idx, glue-when(nslots % 2 == 0, seq({ tooth }, 0 to num)))
+;;   ;; println-all(["NUM " num " NSLOTS " nslots " IDX " idx " DIMS " dims " TDIMS " tdims[idx]])
+;;   val overlap   = box(i)
+;;   val teeth     = overlap & mov(center(i) + vslot-off, tooths)
+;;   val pa        = rem(a, teeth)
+;;   val neg-teeth = rem(overlap, teeth)
+;;   val pb        = rem(b, neg-teeth)
+;;   [pa, pb]
 
 public defn all-combos (a:Seqable<Int>, b:Seqable<Int>) -> Seqable<[Int, Int]> :
   generate<[Int, Int]> :
@@ -1038,7 +1166,7 @@ public defn abutt-captured-on? (a:Box, b:Box, d:Int, dir:Int) :
 
 public defn abutt-captured-on? (a:Box, b:Box, d:Int) :
   val res = (lo(b)[d] - lo(a)[d]) > (- EPS) and (hi(a)[d] - hi(b)[d]) > (- EPS)
-  ;; println-all(["  PARTIAL-CAPTURED-ON? D " d " A " a " B " b " RES " res])
+  ;; println-all(["  PARTIAL-CAPTURED-ON? D " d " pA " a " B " b " RES " res])
   res
 
 public defn abutt-captured2d? (b1:Box, b2:Box) -> True|False :
@@ -1055,17 +1183,21 @@ public defn abutt-captured2d? (b1:Box, b2:Box) -> True|False :
     false
 
 public defn join-pieces (elts:Seqable<Shape>,
-                         default-slot-info-getter:((Float, Float) -> [Int, Float, Float]),
-                         slots-info-getters:Tuple<KeyValue<[Int,Int],((Float, Float) -> [Int, Float, Float])>>,
+                         default-get-teeth:Box -> Shape,
+                         abutt-get-teeth:Box -> Shape,
+                         get-teeths:Tuple<KeyValue<[Int,Int], (Box -> Shape)>>,
                          sames:Tuple<[Int, Int, V3f]>) :
-  defn lookup-slot-info-getter (i:Int, j:Int) -> ((Float,Float) -> [Int, Float, Float]) :
-    label<((Float,Float) -> [Int, Float, Float])> return :  
-      for kv in slots-info-getters do :
+  val pieces = to-array<Shape> $ elts
+  defn lookup-get-teeth (i:Int, j:Int) -> (Box -> Shape) :
+    label<(Box -> Shape)> return :  
+      for kv in get-teeths do :
         val [ki, kj] = key(kv)
         if (ki == i and kj == j) or (ki == j and kj == i) :
           return(value(kv))
-      default-slot-info-getter
-  val pieces = to-array<Shape> $ elts
+      if min-idx(dims(bounds(pieces[i]))) == min-idx(dims(bounds(pieces[j]))) :
+        abutt-get-teeth
+      else :
+        default-get-teeth
   defn update (k:Int, nk:Shape) :
     pieces[k] = nk
     for [i, j, d] in sames do :
@@ -1076,9 +1208,10 @@ public defn join-pieces (elts:Seqable<Shape>,
     for j in (i + 1) to length(pieces) do : 
       val [bi, bj] = [bounds(pieces[i]), bounds(pieces[j])]
       if not empty?(bi & bj) :
-        val num = (fn (o:Float,s:Float) : [2, 0.0f, 0.0f]) when captured?(bi, bj) else lookup-slot-info-getter(i, j)
-        print-all(["JOINING I " i " J " j ": "])
-        val [ni, nj] = join-two-pieces(pieces[i], pieces[j], num)
+        val cap? = captured?(bi, bj)
+        val get-teeth = get-square-teeth{_, 2} when cap? else lookup-get-teeth(i, j)
+        ;; println-all(["JOINING I " i " J " j " CAP? " cap? ": "])
+        val [ni, nj] = join-two-pieces(pieces[i], pieces[j], get-teeth)
         update(i, ni)
         update(j, nj)
   pieces
@@ -1163,7 +1296,7 @@ public defn quilt (shape:Shape, stock-dims:V3f) -> Seqable<Shape> :
   val sorted-stock-dims = to-tuple $ lazy-qsort(stock-dims)
   val cmps = to-tuple $ seq({1 when _ <= _ else 0}, sorted-shape-dims, sorted-stock-dims)
   val n = reduce(plus, cmps)
-  println-all(["N " n " SHAPE-DIMS " sorted-shape-dims " STOCK-DIMS " sorted-stock-dims " CMPS " cmps])
+  ;; println-all(["N " n " SHAPE-DIMS " sorted-shape-dims " STOCK-DIMS " sorted-stock-dims " CMPS " cmps])
   if n == 3 :
     [ shape ]
   else if n == 2 :
@@ -1172,11 +1305,11 @@ public defn quilt (shape:Shape, stock-dims:V3f) -> Seqable<Shape> :
     val splits-0 = quilt-one(shape, sorted-stock-dims[2], max-idx(shape-dims), mid-idx(shape-dims), t)
     to-tuple $ cat-all $ seq(quilt-one{_, sorted-stock-dims[1], mid-idx(shape-dims), max-idx(shape-dims), t}, splits-0)
 
-public defn join-pieces (elts:Seqable<Shape>, num:(Float,Float) -> [Int, Float, Float]) :
-  join-pieces(elts, num, [], [])
+public defn join-pieces (elts:Seqable<Shape>, get-teeth:Box -> Shape) :
+  join-pieces(elts, get-teeth, get-teeth, [], [])
 
 ;; TODO: LIMITED TO AXIS ALIGNED SHAPES
-public defn smash (s:Shape) -> Shape :
+public defn smash<?T> (s:?T&Poseable) -> T :
   val bb    = bounds(s)
   val dims  = dims(bb)
   val idx   = min-idx(dims)
@@ -1188,18 +1321,18 @@ defn segment<?T> (shapes:Seqable<?T>, width:T -> Float, max-width:Float, space:F
   val row = Vector<T>()
   generate<Tuple<T>> :
     for pc in shapes do :
-      val off = reduce(plus, 0.0f, join(seq(width, row), space))
+      val off = reduce(plus, join(seq(width, cat(row, [pc])), space))
       if off > max-width :
         yield(to-tuple $ row)
         clear(row)
       add(row, pc)
     if length(row) > 0 : yield(to-tuple $ row)
 
-public defn nest (pcs:Seqable<Shape>, size:V3f, space:Float) -> Seq<Assembly> :
-  val spcs  = to-tuple $ lazy-qsort({ area(dims(bounds(_))) }, pcs)
-  val rpcs  = seq(fn (pc): reflect-xy(pc) when max-idx(dims(bounds(pc))) != max-idx(size) else pc, spcs)
-  val rows  = to-tuple $ segment(rpcs, { x(dims(bounds(_))) }, x(size), space)
-  val pages = segment(rows, { y(dims(bounds(union(_)))) }, y(size), space)
+public defn nest (pcs:Seqable<Poseable>, size:V3f, space:Float) -> Seq<Assembly> :
+  val rpcs  = seq(fn (pc): reflect-xy(pc) when max-idx(dims(bounds(pc))) != max-idx(size) else pc, pcs)
+  val spcs  = to-tuple $ lazy-qsort({ y(dims(bounds(_))) }, rpcs)
+  val rows  = to-tuple $ segment(spcs, { x(dims(bounds(_))) }, x(size), space)
+  val pages = segment(rows, { y(dims(bounds(union(shapes $ Assembly $ _)))) }, y(size), space)
   for page in pages seq :
     val rrows = for row in page seq: Assembly(stack-x(join(row, spacer-x(space))))
     Assembly(stack-y(join(rrows, Assembly([ spacer-y(space) ]))))

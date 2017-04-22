@@ -9,9 +9,18 @@ defpackage ao-gfx :
 
 defmethod render (bt:BoundedTree) -> False :
   ;; TODO MAKE PARAMETERIZABLE
-  val mesh = tree-render-mesh(tree(bt), bounds(bt), *resolution*)
+  val start-time = current-time-ms()
+  val mesh = if mesh(bt) is False :
+    val res = tree-render-mesh(tree(bt), bounds(bt), *resolution*)
+    val mesh-time = current-time-ms()
+    ;; println-all(["MESH " dims(bounds(bt)) " RENDER " to-float(mesh-time - start-time) * 0.001f " SECS"])
+    res
+  else :
+    mesh(bt) as Mesh
+  set-mesh(bt, mesh)
   ;; println-all(["MESH: V = " length(vertices(mesh)) " F = " length(faces(mesh))])
   render(mesh)
+  tree-delete(tree(bt))
   ;; gl-push-attrib(GL-CURRENT-BIT)
   ;; gl-color3f(1.0f, 0.5f, 0.5f)
   ;; gl-point-size(10.0f)
