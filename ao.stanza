@@ -7,31 +7,76 @@ defpackage ao :
   import geom
   import font
 
-extern tree_x: () -> ptr<?>
-extern tree_y: () -> ptr<?>
-extern tree_z: () -> ptr<?>
-extern tree_const: (float) -> ptr<?>
-extern tree_unary: (int, ptr<?>) -> ptr<?>
-extern tree_binary: (int, ptr<?>, ptr<?>) -> ptr<?>
-extern opcode_enum: (ptr<?>) -> int
-extern tree_delete: (ptr<?>) -> int
-extern tree_export_slice: (ptr<?>, ptr<?>, float, float, float, float, float, float) -> int
-extern tree_export_mesh: (ptr<?>, ptr<?>, float, float, float, float, float, float, float) -> int
-;; extern tree_render_mesh: (ptr<?>, ptr<ptr<float>>, float, float, float, float, float, float, float) -> int
-extern tree_render_mesh: (ptr<?>, ptr<int>, ptr<ptr<float>>, ptr<int>, ptr<ptr<int>>, float, float, float, float, float, float, float) -> int
-extern tree_render_slice: (ptr<?>, float, float, float, float, float, float) -> ptr<Contours>
-extern contours_delete: (ptr<Contours>) -> int
-extern window_show_tree: (ptr<?>, ptr<?>, ptr<?>) -> ptr<?>
-extern ao_run: () -> ptr<?>
-extern ao_halt: () -> ptr<?>
+lostanza deftype ao_interval :
+  lower : float
+  upper : float
+
+lostanza deftype ao_region2 :
+  X : ao_interval
+  Y : ao_interval
+
+lostanza deftype ao_region3 :
+  X : ao_interval
+  Y : ao_interval
+  Z : ao_interval
+
+lostanza deftype ao_vec2 :
+  x : float
+  y : float
+
+lostanza deftype ao_vec3 :
+  x : float
+  y : float
+  z : float
+
+lostanza deftype ao_vec4 :
+  x : float
+  y : float
+  z : float
+  w : float
+
+lostanza deftype ao_tri :
+  a : int
+  b : int
+  c : int
+
+lostanza deftype ao_contour :
+  pts : ptr<ao_vec2>
+  count : int
+
+lostanza deftype ao_contours :
+  cs : ptr<ao_contour>
+  count : int
+
+lostanza deftype AoContours :
+  value : ptr<ao_contours>
+
+lostanza deftype ao_mesh :
+  verts : ptr<ao_vec3>
+  tris : ptr<ao_tri>
+  tri-count : int
+  vert-count : int
+
+lostanza deftype AoMesh :
+  value : ptr<ao_mesh>
+
+extern ao_tree_x: () -> ptr<?>
+extern ao_tree_y: () -> ptr<?>
+extern ao_tree_z: () -> ptr<?>
+extern ao_tree_const: (float) -> ptr<?>
+extern ao_tree_unary: (int, ptr<?>) -> ptr<?>
+extern ao_tree_binary: (int, ptr<?>, ptr<?>) -> ptr<?>
+extern ao_opcode_enum: (ptr<?>) -> int
+extern ao_tree_delete: (ptr<?>) -> int
+extern ao_tree_save: (ptr<?>, ptr<byte>) -> int
+extern ao_tree_save_mesh_spread: (ptr<?>, float, float, float, float, float, float, float, ptr<byte>) -> int
+extern ao_tree_save_slice_spread: (ptr<?>, float, float, float, float, float, float, ptr<byte>) -> int
+extern ao_tree_render_mesh_spread: (ptr<?>, float, float, float, float, float, float, float) -> ptr<ao_mesh>
+extern ao_tree_render_slice_spread: (ptr<?>, float, float, float, float, float, float) -> ptr<ao_contours>
+extern ao_contours_delete: (ptr<ao_contours>) -> int
+extern ao_mesh_delete: (ptr<ao_mesh>) -> int
 extern printf: (ptr<?>, ? ...) -> int
 extern free: (ptr<?>) -> int
-
-public lostanza deftype Contours :
-  xs : ptr<ptr<float>>
-  ys : ptr<ptr<float>>
-  sizes : ptr<int>
-  size : int
 
 public lostanza deftype Tree <: Geom :
   value: ptr<?>
@@ -109,6 +154,8 @@ public defmulti shapes (p:Poseable) -> Seqable<Shape>
 public defn mov-x<?T> (dx:Float, p:?T&Poseable) -> T : mov(V3f(dx, 0.0f, 0.0f), p)
 public defn mov-y<?T> (dy:Float, p:?T&Poseable) -> T : mov(V3f(0.0f, dy, 0.0f), p)
 public defn mov-z<?T> (dz:Float, p:?T&Poseable) -> T : mov(V3f(0.0f, 0.0f, dz), p)
+
+public defn shapes (s:Seqable<Shape>) : s
 
 ;;; ASSEMBLIES
 
@@ -220,117 +267,94 @@ public defn Shape (s:Shape, bounds:Box) :
   Shape(s, bounds, [])
 
 public lostanza defn tree-delete (t:ref<Tree>) -> ref<False> :
-  call-c tree_delete(t.value)
+  call-c ao_tree_delete(t.value)
   return false
 
-public lostanza defn tree-export-mesh (t:ref<Tree>, filename:ref<String>, box:ref<Box>, res:ref<Float>) -> ref<False> :
-  call-c tree_export_mesh(t.value, addr!(filename.chars), x(lo(box)).value, x(hi(box)).value, y(lo(box)).value, y(hi(box)).value, z(lo(box)).value, z(hi(box)).value, res.value)
+public lostanza defn tree-save (t:ref<Tree>, filename:ref<String>) -> ref<False> :
+  call-c ao_tree_save(t.value, addr!(filename.chars))
   return false
 
-public lostanza defn tree-export-slice (t:ref<Tree>, filename:ref<String>, box:ref<Box>, res:ref<Float>) -> ref<False> :
-  call-c tree_export_slice(t.value, addr!(filename.chars), x(lo(box)).value, x(hi(box)).value, y(lo(box)).value, y(hi(box)).value, z(lo(box)).value, res.value)
+public lostanza defn tree-save-mesh (t:ref<Tree>, filename:ref<String>, box:ref<Box>, res:ref<Float>) -> ref<False> :
+  call-c ao_tree_save_mesh_spread(t.value, x(lo(box)).value, x(hi(box)).value, y(lo(box)).value, y(hi(box)).value, z(lo(box)).value, z(hi(box)).value, res.value, addr!(filename.chars))
   return false
 
-;; public lostanza deftype RenderMesh :
-;;   length: int
-;;   value: ptr<float>
+public lostanza defn tree-save-slice (t:ref<Tree>, filename:ref<String>, box:ref<Box>, res:ref<Float>) -> ref<False> :
+  call-c ao_tree_save_slice_spread(t.value, x(lo(box)).value, x(hi(box)).value, y(lo(box)).value, y(hi(box)).value, z(lo(box)).value, res.value, addr!(filename.chars))
+  return false
 
-public lostanza deftype RenderMesh :
-  n-verts: int
-  verts: ptr<float>
-  n-tris: int
-  tris: ptr<int>
+public lostanza defn get-vert-value (m:ref<AoMesh>, i:ref<Int>) -> ref<V3f> :
+  val vert = m.value.verts[i.value]
+  return V3f(new Float{vert.x}, new Float{vert.y}, new Float{vert.z})
 
-public lostanza defn n-verts (m:ref<RenderMesh>) -> ref<Int> :
-  return new Int{m.n-verts}
+public lostanza defn get-vert-index (m:ref<AoMesh>, i:ref<Int>) -> ref<V3i> :
+  val tri = m.value.tris[i.value]
+  return V3i(new Int{tri.a}, new Int{tri.b}, new Int{tri.c})
 
-public lostanza defn get-vert-value (m:ref<RenderMesh>, i:ref<Int>) -> ref<Float> :
-  return new Float{m.verts[i.value]}
+public lostanza defn tri-count (m:ref<AoMesh>) -> ref<Int> :
+  return new Int{m.value.tri-count}
 
-public lostanza defn n-tris (m:ref<RenderMesh>) -> ref<Int> :
-  return new Int{m.n-tris}
+public lostanza defn vert-count (m:ref<AoMesh>) -> ref<Int> :
+  return new Int{m.value.vert-count}
 
-public lostanza defn get-vert-index (m:ref<RenderMesh>, i:ref<Int>) -> ref<Int> :
-  return new Int{m.tris[i.value]}
-
-defn to-mesh (rm:RenderMesh) -> Mesh :
-  val tris = generate<V3i> :
-    for ti in 0 to n-tris(rm) do :
-      val toff = ti * 3
-      yield(V3i(get-vert-index(rm, toff + 0), get-vert-index(rm, toff + 1), get-vert-index(rm, toff + 2)))
-  val verts = generate<V3f> :
-    for vi in 0 to n-verts(rm) do :
-      val voff = vi * 3
-      yield(V3f(get-vert-value(rm, voff + 0), get-vert-value(rm, voff + 1), get-vert-value(rm, voff + 2)))
-  Mesh(to-tuple(verts), to-tuple(tris))
+defn to-mesh (rm:AoMesh) -> Mesh :
+  ;; println-all(["STZ MESH COUNT " tri-count(rm)])
+  val tris = to-tuple $ for ti in 0 to tri-count(rm) seq : get-vert-index(rm, ti)
+  ;; for (tri in tris, i in 0 to 4) do :
+  ;;   println-all(["STZ TRI " tri])
+  val verts = to-tuple $ for vi in 0 to vert-count(rm) seq : get-vert-value(rm, vi)
+  ;; for (vert in verts, i in 0 to 4) do :
+  ;;   println-all(["STZ VERT " i " " vert])
+  Mesh(verts, tris)
 
 public lostanza defn tree-render-mesh (t:ref<Tree>, box:ref<Box>, res:ref<Float>) -> ref<Mesh> :
-  val out = new RenderMesh{0, 0L as ptr<float>, 0, 0L as ptr<int>}
-  val len = call-c tree_render_mesh(t.value, addr!(out.n-verts), addr!(out.verts), addr!(out.n-tris), addr!(out.tris), x(lo(box)).value, x(hi(box)).value, y(lo(box)).value, y(hi(box)).value, z(lo(box)).value, z(hi(box)).value, res.value)
-  val mesh = to-mesh(out)
-  call-c free(out.verts)
-  call-c free(out.tris)
+  val out = call-c ao_tree_render_mesh_spread(t.value, x(lo(box)).value, x(hi(box)).value, y(lo(box)).value, y(hi(box)).value, z(lo(box)).value, z(hi(box)).value, res.value)
+  val c-mesh = new AoMesh{out}
+  val mesh = to-mesh(c-mesh)
+  call-c ao_mesh_delete(out)
   return mesh
 
-lostanza defn get-x (cs:ref<Contours>, c:ref<Int>, i:ref<Int>) -> ref<Float> :
-  return new Float{cs.xs[c.value][i.value]}
+lostanza defn get (contours:ref<AoContours>, c:ref<Int>, i:ref<Int>) -> ref<V3f> :
+  val contour = contours.value.cs[c.value]
+  val pt      = contour.pts[i.value]
+  return V2f(new Float{pt.x}, new Float{pt.y})
 
-lostanza defn get-y (cs:ref<Contours>, c:ref<Int>, i:ref<Int>) -> ref<Float> :
-  return new Float{cs.ys[c.value][i.value]}
+lostanza defn get-contour-size (contours:ref<AoContours>, i:ref<Int>) -> ref<Int> :
+  val contour = contours.value.cs[i.value]
+  return new Int{contour.count}
 
-lostanza defn get-contour-size (cs:ref<Contours>, i:ref<Int>) -> ref<Int> :
-  return new Int{cs.sizes[i.value]}
+lostanza defn num-contours (cs:ref<AoContours>) -> ref<Int> :
+  return new Int{cs.value.count}
 
-lostanza defn num-contours (cs:ref<Contours>) -> ref<Int> :
-  return new Int{cs.size}
-
-defn to-polygon (cs:Contours) -> Polygon :
+defn to-polygon (cs:AoContours) -> Polygon :
   val contours =
     for ci in 0 to num-contours(cs) seq :
-      val points =
-        for j in 0 to get-contour-size(cs, ci) seq :
-          V2f(get-x(cs, ci, j), get-y(cs, ci, j))
+      val points = for j in 0 to get-contour-size(cs, ci) seq : cs[ci, j]
       Contour(to-tuple $ points)
   Polygon(to-tuple $ contours)
 
 public lostanza defn tree-render-slice (t:ref<Tree>, box:ref<Box>, res:ref<Float>) -> ref<Polygon> :
-  val out = call-c tree_render_slice(t.value, x(lo(box)).value, x(hi(box)).value, y(lo(box)).value, y(hi(box)).value, z(lo(box)).value, res.value)
-  val contours = new Contours{out.xs, out.ys, out.sizes, out.size}
-  val poly = to-polygon(contours)
-  call-c contours_delete(out)
+  val out = call-c ao_tree_render_slice_spread(t.value, x(lo(box)).value, x(hi(box)).value, y(lo(box)).value, y(hi(box)).value, z(lo(box)).value, res.value)
+  val slice = new AoContours{out}
+  val poly = to-polygon(slice)
+  call-c ao_contours_delete(out)
   return poly
 
-public lostanza defn show (t:ref<Tree>, filename:ref<String>, name:ref<String>) -> ref<False> :
-  call-c window_show_tree(addr!(filename.chars), addr!(name.chars), t.value)
-  return false
-
-public defn show (t:Tree) :
-  show(t, "ao.stanza", "shape")
-
-public lostanza defn ao-run () -> ref<False>  :
-  call-c ao_run()
-  return false
-
-public lostanza defn ao-halt () -> ref<False> :
-  call-c ao_halt()
-  return false
-
 public lostanza defn fab-x () -> ref<FloField> :
-  return FloFieldOp(new Tree{call-c tree_x()}, String("X"), List())
+  return FloFieldOp(new Tree{call-c ao_tree_x()}, String("X"), List())
 public lostanza defn fab-y () -> ref<FloField> :
-  return FloFieldOp(new Tree{call-c tree_y()}, String("Y"), List())
+  return FloFieldOp(new Tree{call-c ao_tree_y()}, String("Y"), List())
 public lostanza defn fab-z () -> ref<FloField> :
-  return FloFieldOp(new Tree{call-c tree_z()}, String("Z"), List())
+  return FloFieldOp(new Tree{call-c ao_tree_z()}, String("Z"), List())
 public lostanza defn lit (f:ref<Float>) -> ref<FloField> :
-  return FloFieldLit(new Tree{call-c tree_const(f.value)}, f)
+  return FloFieldLit(new Tree{call-c ao_tree_const(f.value)}, f)
 public lostanza defn lit (f:ref<Double>) -> ref<FloField> :
   return lit(to-float(f))
 public lostanza defn opcode (name:ref<String>) -> ref<Int> :
-  return new Int{call-c opcode_enum(addr!(name.chars))}
+  return new Int{call-c ao_opcode_enum(addr!(name.chars))}
 public lostanza defn unary (op:ref<String>, t:ref<FloField>) -> ref<FloField> :
-  return FloFieldOp(new Tree{call-c tree_unary(opcode(op).value, tree(t).value)}, op, List(t))
+  return FloFieldOp(new Tree{call-c ao_tree_unary(opcode(op).value, tree(t).value)}, op, List(t))
 public lostanza defn binary (op:ref<String>, t1:ref<FloField>, t2:ref<FloField>) -> ref<FloField> :
-  return FloFieldOp(new Tree{call-c tree_binary(opcode(op).value, tree(t1).value, tree(t2).value)}, op, List(t1, t2))
+  return FloFieldOp(new Tree{call-c ao_tree_binary(opcode(op).value, tree(t1).value, tree(t2).value)}, op, List(t1, t2))
 public defn min-lit () : lit(neg-inf)
 public defn max-lit () : lit(pos-inf)
 
@@ -599,9 +623,17 @@ public defn taper-xy-z (h:Float, s0:Float, s1:Float, s:Shape) -> Shape :
 public defn revolve-y (s:Shape) -> Shape :
   with-xyz(id-mat44(), fn (p): Vec3Field(sqrt(sqr(x(p)) + sqr(z(p))), y(p), z(p)), s)
 
+public defn unrevolve-y (s:Shape) -> Shape :
+  with-xyz(mag-mat44(V3f(2.0f * PI-F, 1.0f, 1.0f)), fn (p): Vec3Field(z(p) * cos(x(p)), y(p), z(p) * sin(x(p))), s)
+  ;; with-xyz(mag-mat44(V3f(2.0f * PI-F, 1.0f, 1.0f)), fn (p): Vec3Field(atan2(x(p), z(p)), y(p), sqrt(sqr(x(p)) + sqr(z(p)))), s)
+
 ;; TODO : UPDATE BOUNDS
 public defn revolve-x (s:Shape) -> Shape :
   with-xyz(id-mat44(), fn (p): Vec3Field(x(p), sqrt(sqr(y(p)) + sqr(z(p))), z(p)), s)
+
+public defn unrevolve-x (s:Shape) -> Shape :
+  with-xyz(mag-mat44(V3f(1.0f, 2.0f * PI-F, 1.0f)), fn (p): Vec3Field(x(p), z(p) * cos(y(p)), z(p) * sin(y(p))), s)
+  ;; with-xyz(mag-mat44(V3f(2.0f * PI-F, 1.0f, 1.0f)), fn (p): Vec3Field(x(p), atan2(y(p), z(p)), sqrt(sqr(y(p)) + sqr(z(p)))), s)
 
 ;; TODO : UPDATE BOUNDS
 public defn xy (z:Float, s:Shape) -> Shape :
@@ -974,22 +1006,28 @@ public defn jit (g:Geom) -> Geom :
     (geom) :        geom
 
 public var *resolution* = 8.0f
+public var *render-offset* = 16.0f
 
 public defn slice (z:Float, s:Shape) -> Polygon :
   val bt = jit(s) as BoundedTree
-  val bds = Box(xy(lo(bounds(s)) + V3f(0.0f, 0.0f, z)), xy(hi(bounds(s)) + V3f(0.0f, 0.0f, z)))
+  val eps = *render-offset* ;; 1.0f / *resolution*
+  val bds = Box(xy(lo(bounds(s)) + V3f((- eps), (- eps), z)), xy(hi(bounds(s)) + V3f(eps, eps, z)))
   val start = current-time-ms()
   val poly = tree-render-slice(tree(bt), bds, *resolution*)
   ;; println-all(["RENDER-SLICE = " to-float(current-time-ms() - start) * 0.001f])
   poly
 
+public defn dump (filename:String, s:Shape) -> False :
+  val bt = jit(s) as BoundedTree
+  tree-save(tree(bt), filename)
+
 public defn save (z:Float, filename:String, s:Shape) -> False :
   val bt = jit(s) as BoundedTree
-  tree-export-slice(tree(bt), filename, bounds(s), *resolution*)
+  tree-save-slice(tree(bt), filename, bounds(s), *resolution*)
 
 public defn save (filename:String, s:Shape) -> False :
   val bt = jit(s) as BoundedTree
-  tree-export-mesh(tree(bt), filename, bounds(s), *resolution*)
+  tree-save-mesh(tree(bt), filename, bounds(s), *resolution*)
 
 ;;; PLATES
 
@@ -997,29 +1035,30 @@ public var *explosion* = 0.25f
 
 public defn weld (i-a-shapes:Seqable<Shape>, i-b-shapes:Seqable<Shape>) -> Seqable<Shape> :
   val [a-shapes, b-shapes] = [to-tuple $ i-a-shapes, to-tuple $ i-b-shapes]
-  ;; println-all(["WELDING " length(a-shapes) + length(b-shapes)])
+  println-all(["WELDING " length(a-shapes) + length(b-shapes)])
   defn overlap? (a:Shape, b:Shape) -> True|False :
     val i = fatten(bounds(a) & bounds(b), EPS)
-    val res = not empty?(i) and max(dims(i)) > (min(dims(bounds(a))) * 1.1f)
-    println-all([" I " dims(i) " MAX-I " max(dims(i)) " MIN-A " min(dims(bounds(a))) " RES = " res])
+    val mid = dims(i)[sorted-indices(dims(i))[1]]
+    val res = not empty?(i) and mid > (min(dims(bounds(a))) * 1.1f)
+    println-all([" I " dims(i) " MID-I " mid " MIN-A " min(dims(bounds(a))) " RES = " res])
     res
   val res = to-tuple $ generate<Shape> :
     val bs-mated? = HashTable<Int, Int>()
     for (a in a-shapes, i in 0 to false) do :
-      ;; println-all(["WELD I " i " DIMS " dims(bounds(a))])
+      println-all(["WELD I " i " DIMS " dims(bounds(a))])
       val mates = to-tuple $ generate<Shape> :
         for (b in b-shapes, j in 0 to false) do :
-          ;; print-all(["CONSIDERING " i " / " j ": "])
+          print-all(["CONSIDERING " i " / " j ": "])
           if overlap?(a, b) and not key?(bs-mated?, j) :
             yield(b)
             bs-mated?[j] = j
-      ;; println-all(["MATES " length(mates)])
+      println-all(["MATES " length(mates)])
       yield(a | union(mates))
     for (b in b-shapes, j in 0 to false) do :
       if not key?(bs-mated?, j) :
-        ;; println-all(["EXTRA B " j])
+        println-all(["EXTRA B " j])
         yield(b)
-  ;; println-all(["WELDING " length(res) " TOTAL"])
+  println-all(["WELDING " length(res) " TOTAL"])
   res
 
 public defn weld (a-shapes:Poseable, b-shapes:Poseable) -> Seqable<Shape> :
@@ -1051,7 +1090,7 @@ public defn get-even-teeth (i:Box, get-tooth:(Box, Int) -> Shape, i-n-slots:Int,
   val num       = to-int $ round $ (to-float(n-slots) / 2.0f)
   val stooth    = square-tooth(i, n-slots)
   val tooth     = get-tooth(i, n-slots)
-  defn gen-tooth (n:Int) : stooth when n == 0 or n == (num - 1) else tooth
+  defn gen-tooth (n:Int) : tooth ;; stooth when n == 0 or n == (num - 1) else tooth
   val teeth     = to-tuple $ seq(gen-tooth, 0 to num)
   val glued-teeth = to-tuple $ glue-when(n-slots % 2 == 0, teeth)
   ;; println-all(["N-SLOTS " n-slots " NUM " num " N-TEETH " length(teeth) " GLUED-TEETH " length(glued-teeth)])
@@ -1064,7 +1103,7 @@ public defn get-square-teeth (i:Box, n-slots:Int, slot-size:Float) :
 public defn get-square-teeth (i:Box, slot-size:Float) : get-square-teeth(i, 0, slot-size)
 public defn get-square-teeth (i:Box, n-slots:Int) : get-square-teeth(i, n-slots, 0.0f)
 
-defn rot-mat44 (src:V3f, dst:V3f) -> Mat44 :
+public defn rot-mat44 (src:V3f, dst:V3f) -> Mat44 :
   if src == dst :
     ;; println-all(["ROT NONE"])
     id-mat44()
@@ -1078,24 +1117,34 @@ defn rot-mat44 (src:V3f, dst:V3f) -> Mat44 :
     else : ;; if idx == 2 :
       reflect-xy-mat44()
 
-defn rot-mat44 (src0:V3f, src1:V3f, dst0:V3f, dst1:V3f) -> Mat44 :
+public defn rot-mat44 (src0:V3f, src1:V3f, dst0:V3f, dst1:V3f) -> Mat44 :
   val mat0 = rot-mat44(src0, dst0)
   val mat1 = rot-mat44(mat0 * src1, dst1)
   mat0 * mat1
 
-defn rot-mat44 (src0:Int, src1:Int, dst0:Int, dst1:Int) -> Mat44 :
+public defn rot-mat44 (src0:Int, src1:Int, dst0:Int, dst1:Int) -> Mat44 :
   ;; println-all(["ROT-MAT44 S0 " src0 " S1 " src1 " D0 " dst0 " D1 " dst1])
   rot-mat44(V3f-unit(src0), V3f-unit(src1), V3f-unit(dst0), V3f-unit(dst1))
 
 public defn join-two-pieces (a:Shape, b:Shape, get-teeth:Box -> Shape) -> [Shape, Shape] :
-  val i         = fatten(bounds(a) & bounds(b), EPS)
-  val overlap   = box(i)
-  val raw-teeth = get-teeth(i)
-  val xform     = rot-mat44(0, 2, max-idx(dims(i)), min-idx(dims(bounds(a)))) * mov-mat44(center(i))
-  val teeth     = overlap & xyz(xform, raw-teeth)
-  val pa        = rem(a, teeth)
-  val neg-teeth = rem(overlap, teeth)
-  val pb        = rem(b, neg-teeth)
+  val i          = fatten(bounds(a) & bounds(b), EPS)
+  val overlap    = box(i)
+  val mid-idx    = mid-idx(dims(bounds(overlap)))
+  val dir        = center(bounds(a))[mid-idx] - center(bounds(b))[mid-idx]
+  ;; val [min-idx-a, min-idx-b] = [min-idx(dims(bounds(a))), min-idx(dims(bounds(b)))]
+  ;; println-all(["MIN= " (min-idx-a == min-idx-b) " DIR " dir
+  ;;              " DIMS-A " dims(bounds(a)) " DIMS-B " dims(bounds(b))
+  ;;              " CTR-A " center(bounds(a))[mid-idx] " CTR-B " center(bounds(b))[mid-idx]
+  ;;              " BOUNDS-A " bounds(a) " BOUNDS-B " bounds(b)])
+  val raw-teeth* = get-teeth(i)
+  val raw-teeth  = reflect-y(raw-teeth*) when dir < 0.0f else raw-teeth*
+  val xform      = rot-mat44(0, 2, max-idx(dims(i)), min-idx(dims(bounds(a)))) * mov-mat44(center(i))
+  val olap       = overlap ;; fast but conservative
+  ;; val olap      = a & b ;; slow but precise
+  val teeth      = olap & xyz(xform, raw-teeth)
+  val pa         = rem(a, teeth)
+  val neg-teeth  = rem(olap, teeth)
+  val pb         = rem(b, neg-teeth)
   [pa, pb]
 
 ;; public defn join-two-pieces (a:Shape, b:Shape, get-slots-info:(Float, Float) -> [Int, Float, Float]) -> [Shape, Shape] :
@@ -1224,26 +1273,40 @@ defn split-full-overlap (s0:Shape, s1:Shape, t:Float) -> [Shape, Shape] :
   val s0b = s0 & box(Box(set-elt(lo(bounds(s0)), d, hi(i)[d] - o), hi(bounds(s0))))
   [s0a s0b]
 
+defstruct Abuttment :
+  dir : Int
+  d : Int
+  k : Int
+  s : Shape
+
+defmethod print (o:OutputStream, e:Abuttment) :
+  print-all(o, ["ABUTTMENT DIR = " dir(e) " D = " d(e) " K = " k(e)])
+
 defn split-abutt-overlap (i0:Int, s0:Shape, i1:Int, s1:Shape, t:Float) -> [Int, Shape] :
   val i   = bounds(s0) & bounds(s1)
   val d0  = mid-idx(dims(i))
   val d1  = max-idx(dims(i))
   ;; println-all(["SHAPES S0 " bounds(s0) " S1 " bounds(s1)])
-  val [dir, d, k, s] = label<[Int, Int, Int, Shape]> return :
+  ;; val [dir, d, k, s] = label<[Int, Int, Int, Shape]> return :
+  val abuttments = generate<Abuttment> :
     for (a in [s0, s1], b in [s1, s0], k in [i0, i1]) do :
       for d in [d0, d1] do :
         for dir in [-1, 1] do :
           if abutt-captured-on?(bounds(a), bounds(b), d, dir) :
             ;; println-all(["FOUND ABUTTMENT D " d " DIR " dir " K " k])
-            return([dir, d, k, a])
+            yield(Abuttment(dir, d, k, a))
+  val sabuttments = to-tuple $ lazy-qsort(d, abuttments)
+  println-all(["ABUTTMENTS " sabuttments])
+  if length(sabuttments) == 0 :
     println-all(["FAILED TO FIND ABUTTMENT"])
-    ;; ASSERT FAILURE
-    [-1, d0, i0, s0]
-  val o   = dims(i)[d] / 3.0f
-  val nsh = s & box(Box(lo(bounds(s)), set-elt(hi(bounds(s)), d, lo(i)[d] + o)))
-  val nsl = s & box(Box(set-elt(lo(bounds(s)), d, hi(i)[d] - o), hi(bounds(s))))
-  val ns  = nsl when dir == -1 else nsh
-  [k, ns]
+    [i0, s0]
+  else :
+    val a   = sabuttments[0]
+    val o   = dims(i)[d(a)] / 3.0f
+    val nsh = s(a) & box(Box(lo(bounds(s(a))), set-elt(hi(bounds(s(a))), d(a), lo(i)[d(a)] + o)))
+    val nsl = s(a) & box(Box(set-elt(lo(bounds(s(a))), d(a), hi(i)[d(a)] - o), hi(bounds(s(a)))))
+    val ns  = nsl when dir(a) == -1 else nsh
+    [k(a), ns]
 
 public defn split-overlaps (elts:Seqable<Shape>, t:Float) -> Seqable<Shape> :
   val pieces = to-vector<Shape> $ elts
@@ -1274,32 +1337,51 @@ public defn split-overlaps (elts:Seqable<Shape>, t:Float) -> Seqable<Shape> :
   ;; println-all(["  OUT " length(pieces)])
   pieces
 
+;; defn quilt-one (s:Shape, mx:Float, d0:Int, d1:Int, t:Float) -> Seqable<Shape> :
+;;   val bds   = bounds(s)
+;;   val dms   = dims(bds)
+;;   val n = to-int $ ceil(dms[d0] / (mx + 2.0f * t))
+;;   val g = dms[d0] / to-float(n)
+;;   val o = lo(bds)[d0]
+;;   val [ni, phase] = [1, -0.5f] when d1 == 1 else [0, 0.0f]
+;;   val res = to-tuple $ for i in 0 to (n + ni) seq :
+;;     val l = o + ((to-float(i) + phase)     * g - t)
+;;     val h = o + ((to-float(i + 1) + phase) * g + t)
+;;     s & box(Box(set-elt(lo(bds), d0, l), set-elt(hi(bds), d0, h)))
+;;   println-all(["SPLIT MX " mx " D0 " d0 " D1 " d1 " PHASE " phase " -> " to-tuple $ seq(bounds, res)])
+;;   res
+
 defn quilt-one (s:Shape, mx:Float, d0:Int, d1:Int, t:Float) -> Seqable<Shape> :
   val bds   = bounds(s)
   val dms   = dims(bds)
-  val n = to-int $ round(dms[d0] / (mx + 2.0f * t))
+  val n = to-int $ ceil(dms[d0] / (mx + 2.0f * t))
   val g = dms[d0] / to-float(n)
   val o = lo(bds)[d0]
-  val [ni, phase] = [1, -0.5f] when d1 == 1 else [0, 0.0f]
+  val [ni, phase] = [1, -0.5f] when (d1 % 2) == 0 else [0, 0.0f] ;; TODO: GENERALIZE FOR ALL AXES
   val res = to-tuple $ for i in 0 to (n + ni) seq :
     val l = o + ((to-float(i) + phase)     * g - t)
     val h = o + ((to-float(i + 1) + phase) * g + t)
     s & box(Box(set-elt(lo(bds), d0, l), set-elt(hi(bds), d0, h)))
-  println-all(["SPLIT MX " mx " D0 " d0 " D1 " d1 " PHASE " phase " -> " to-tuple $ seq(bounds, res)])
+  println-all(["SPLIT MX " mx " D0 " d0 " D1 " d1 " N " n " PHASE " phase " -> " to-tuple $ seq(bounds, res)])
   res
 
 ;;; SPLITS BIG PIECES INTO N PIECES ACCORDING TO 
 public defn quilt (shape:Shape, stock-dims:V3f) -> Seqable<Shape> :
   val t = min(stock-dims)
   val shape-dims = dims(bounds(shape))
-  val sorted-shape-dims = to-tuple $ lazy-qsort(shape-dims)  
+  val sorted-shape-dims-1 = to-tuple $ lazy-qsort(shape-dims)  
+  val sorted-shape-dims-2 = V3f(sorted-shape-dims-1[0], sorted-shape-dims-1[2], sorted-shape-dims-1[1])
   val sorted-stock-dims = to-tuple $ lazy-qsort(stock-dims)
-  val cmps = to-tuple $ seq({1 when _ <= _ else 0}, sorted-shape-dims, sorted-stock-dims)
-  val n = reduce(plus, cmps)
+  val cmps-1 = to-tuple $ seq({1 when _ <= _ else 0}, sorted-shape-dims-1, sorted-stock-dims)
+  val cmps-2 = to-tuple $ seq({1 when _ <= _ else 0}, sorted-shape-dims-2, sorted-stock-dims)
+  val n-1 = reduce(plus, cmps-1)
+  val n-2 = reduce(plus, cmps-2)
   ;; println-all(["N " n " SHAPE-DIMS " sorted-shape-dims " STOCK-DIMS " sorted-stock-dims " CMPS " cmps])
-  if n == 3 :
+  if n-1 == 3 :
     [ shape ]
-  else if n == 2 :
+  else if n-1 == 2 :
+    quilt-one(shape, sorted-stock-dims[2], max-idx(shape-dims), mid-idx(shape-dims), t)
+  else if n-2 == 2 :
     quilt-one(shape, sorted-stock-dims[1], max-idx(shape-dims), mid-idx(shape-dims), t)
   else :
     val splits-0 = quilt-one(shape, sorted-stock-dims[2], max-idx(shape-dims), mid-idx(shape-dims), t)
@@ -1384,3 +1466,64 @@ public defn all-forms () :
       ;; println-all(["I " i " CNUM " cnum " BITZ " bitz " CBITZ " cbitz " CK? " ck? " OK? " ok? " KEY? " key?(forms, cnum)])
       forms[cnum] = cbitz
   forms
+
+public defstruct Config :
+  n : Int
+  ply-thickness : Float
+  stock-dims : V3f
+  xy-quilt-dims : V3f
+  default-get-teeth : Box -> Shape
+  default-get-abutt-teeth : Box -> Shape
+  get-teeths : Tuple<KeyValue<[Int,Int], (Box -> Shape)>>
+  sames : Tuple<[Int, Int, V3f]> 
+  num-extras : Int
+  
+public defn Config (n:Int, t:Float, stock-dims:V3f, xy-quilt-dims:V3f) :
+  Config(n, t, stock-dims, xy-quilt-dims
+         get-square-teeth{_, 5}, get-even-teeth{_, saw-tooth, 0, 1.0f * to-float(n) * t}, [], [], 0)
+
+public defn Config (n:Int, t:Float) :
+  Config(n, t, V2f(32.0f, 24.0f), V2f(32.0f, 24.0f))
+
+public defn Config () : Config(1, 0.280f)
+
+public defn t (c:Config) : to-float(n(c)) * ply-thickness(c)
+public defn quilt-dims (c:Config) : xy-quilt-dims(c) + V3f(0.0f, 0.0f, t(c) + 0.0001f)
+
+public defstruct Results :
+  bks : Tuple<Shape>
+  pcs : Tuple<Shape>
+
+public defn Results (fm:Seqable<Shape>, c:Config) :
+  val bks0 = to-tuple $ fm
+  val bks1 = to-tuple $ cat-all $ seq(quilt{_, quilt-dims(c)}, bks0)
+  ;; val bks1 = bks0
+  val bks  = to-tuple $ split-overlaps(bks1, t(c))
+  val pcs = to-tuple $ join-pieces(bks, default-get-teeth(c), default-get-abutt-teeth(c), get-teeths(c), sames(c))
+  ;; val pcs = bks
+  Results(bks, pcs)
+
+public defn assembled (pcs:Tuple<Shape>) :
+  group $ pcs
+
+public defn pieces (bks:Tuple<Shape>) :
+  group $ bks
+
+public defn nested (pcs:Tuple<Shape>, c:Config) :
+  println-all(["NESTED"])
+  val spcs = pcs[0 to (length(pcs) - num-extras(c))]
+  val npcs = cat-all $ for i in 0 to n(c) seq : spcs 
+  nest(seq(smash{ group $ [_] }, npcs), stock-dims(c), 0.25f)
+
+public defn explode (elt:Poseable, a:Float) :
+  val ctr = center(bounds(elt))
+  mov(a * ctr, group $ [ elt ])
+
+public defn exploded (pcs:Tuple<Shape>) :
+  group $ seq(explode{_, *explosion*}, pcs)
+
+public defn sliced (pcs:Tuple<Shape>, c:Config) :
+  for page in nested(pcs, c) seq :
+    slice(0.0f, union $ shapes $ page)
+
+public defn group (elts:Seqable<Poseable>) : Assembly(elts)

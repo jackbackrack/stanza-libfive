@@ -8,7 +8,7 @@ defpackage ao-eval :
    import ao
    import glu
    import font
-   import eval-ao
+   import eval-ao-repl
 
 public defn eval-ao (s:String, ao-env:Frame) -> Geom :
   val forms = read-all(s)
