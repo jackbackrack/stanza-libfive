@@ -11,12 +11,14 @@ var gcount = to-seq(0 to false)
 
 defmethod render (bt:BoundedTree) -> False :
   ;; TODO MAKE PARAMETERIZABLE
+  ;; println-all(["RENDERING BT"])
   val mesh = if mesh(bt) is False :
     val num = next(gcount)
-    val filename = string-join(["part-" num ".tree"])
-    tree-save(tree(bt), filename)
+    ;; val filename = string-join(["part-" num ".tree"])
+    ;; tree-save(tree(bt), filename)
     val start-time = current-time-ms()
     val bds = fatten(bounds(bt), V3f-fill(*render-offset*))
+    println("C")
     val res = tree-render-mesh(tree(bt), bds, *resolution*)
     val mesh-time = current-time-ms()
     println-all(["MESH-" num " " dims(bds) " RENDER " to-float(mesh-time - start-time) * 0.001f " SECS"])
