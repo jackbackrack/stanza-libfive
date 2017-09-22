@@ -1,11 +1,11 @@
 stanza_ao_all: ${GEN}/ao.pkg ${GEN}/ao-gfx.pkg ${GEN}/ao-eval.pkg
 
-LIBS += -lao-kernel # ${GEN}/ao.o
+LIBS += -lao-kernel ${GEN}/grid.o ${GEN}/ao.o -lc++
 
 ALL_PKG_DEPS += stanza_ao_all
 
-# ${GEN}/ao.o: stanza-ao/ao.cpp
-# 	c++ -std=c++11 -I/usr/local/include/eigen3 -c stanza-ao/ao.cpp ${CFLAGS} -o ${GEN}/ao.o
+${GEN}/ao.o: stanza-ao/ao.cpp
+	c++ -std=c++11 -I/usr/local/include/eigen3 -c stanza-ao/ao.cpp ${CFLAGS} -o ${GEN}/ao.o
 
 ${GEN}/ao-repl.pkg: stanza-ao/ao-repl.stanza ${GEN}/geom.pkg ${GEN}/ao.pkg ${GEN}/glu.pkg ${GEN}/font.pkg
 	stanza $< $(STZ_FLAGS)
@@ -16,7 +16,7 @@ ${GEN}/eval-ao-repl.stanza: ${GEN}/gen-repl ${GEN}/eval.pkg ${GEN}/ao-repl.pkg
 ${GEN}/eval-ao-repl.pkg: ${GEN}/eval-ao-repl.stanza 
 	stanza ${GEN}/eval-ao-repl.stanza $(STZ_FLAGS)
 
-${GEN}/ao.pkg: stanza-ao/ao.stanza ${GEN}/utils.pkg ${GEN}/geom.pkg ${GEN}/font.pkg ${GEN}/glu.pkg # ${GEN}/ao.o
+${GEN}/ao.pkg: stanza-ao/ao.stanza ${GEN}/utils.pkg ${GEN}/geom.pkg ${GEN}/font.pkg ${GEN}/glu.pkg ${GEN}/grid.pkg ${GEN}/nester.pkg # ${GEN}/ao.o
 	stanza $< $(STZ_FLAGS)
 
 # ${GEN}/eval-ao.stanza: ${GEN}/gen-repl ${GEN}/ao.pkg

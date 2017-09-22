@@ -6,6 +6,8 @@ defpackage ao :
   import glu
   import geom
   import font
+  import grid
+  import nester
 
 lostanza deftype ao_interval :
   lower : float
@@ -164,6 +166,7 @@ defmethod count (f:FloFieldOp) -> Int :
 public deftype Poseable <: Geom
 public defmulti bounds (p:Poseable) -> Box
 public defmulti color (p:Poseable) -> V4f
+public defmulti tags (p:Poseable) -> Tuple<Symbol>
 public defmulti points (p:Poseable) -> Tuple<V3f>
 public defmulti xyz<?T> (mat:Mat44, p:?T&Poseable) -> T
 public defmulti rgb<?T> (c:V4f, p:?T&Poseable) -> T
@@ -189,6 +192,7 @@ public defn Assembly (mat:Mat44, color:V4f, poseables:Seqable<Poseable>) -> Asse
   val children = to-tuple $ poseables
   new Assembly :
     defmethod children (this) : children
+    defmethod tags (this) : to-tuple $ unique $ cat-all $ seq(tags, children)
     defmethod bounds (this) : mat * reduce(bit-or, seq(bounds, children))
     defmethod mat (this) : mat
     defmethod color (this) : color
@@ -237,7 +241,7 @@ public defmulti cache (s:Shape) -> HashTable<Vec3Field,FloField>
 public defmulti mesh (s:Shape) -> False|Mesh
 public defmulti set-mesh (s:Shape, m:Mesh) -> False
 
-public defn Shape (fabber:(Vec3Field) -> FloField, bounds:Box, points:Tuple<V3f>) :
+public defn Shape (fabber:(Vec3Field) -> FloField, bounds:Box, tags:Tuple<Symbol>, points:Tuple<V3f>) :
   val cache = HashTable<Vec3Field,FloField>()
   var mesh:False|Mesh = false
   new Shape :
@@ -245,15 +249,19 @@ public defn Shape (fabber:(Vec3Field) -> FloField, bounds:Box, points:Tuple<V3f>
     defmethod bounds (this) : bounds
     defmethod points (this) : points
     defmethod cache (this) : cache
+    defmethod tags (this) : tags
     defmethod shapes (this) : [ this ]
     defmethod mesh (this) : mesh
     defmethod set-mesh (this, m:Mesh) : mesh = m
 
 public defn Shape (fabber:(Vec3Field) -> FloField, bounds:Box) :
-  Shape(fabber, bounds, [])
+  Shape(fabber, bounds, [], [])
 
 public defn add-points (s:Shape, points:Tuple<V3f>) :
-  Shape(fabber(s), bounds(s), points)
+  Shape(fabber(s), bounds(s), tags(s), points)
+
+public defn add-tags (s:Shape, tags:Tuple<Symbol>) :
+  Shape(fabber(s), bounds(s), tags, points(s))
 
 public defn add-min-x-point (s:Shape) :
   add-points(s, [V3f(x(lo(bounds(s))), 0.0f, 0.0f)])
@@ -342,9 +350,10 @@ lostanza defn copy-bytes (b:ref<ByteArray>, p:ref<AoPixels>, n:ref<Int>) -> ref<
 defn to-pixels (p:AoPixels, res:Float) -> Pixels :
   val width = width(p)
   val height = height(p)
-  println-all(["WIDTH " width " HEIGHT " height])
-  val data = ByteArray(width * height)
-  copy-bytes(data, p, width * height)
+  val tot = width * height
+  ;; println-all(["WIDTH " width " HEIGHT " height " NUM " tot])
+  val data = ByteArray(tot)
+  copy-bytes(data, p, tot)
   Pixels(V3i(width, height, 1), 1.0f / res, data)
 
 public lostanza defn tree-render-pixels (t:ref<Tree>, box:ref<Box>, res:ref<Float>) -> ref<Pixels> :
@@ -447,7 +456,7 @@ public defn sqrt (x:FloField) -> FloField :
 public defn sqr (x:FloField) -> FloField :
   if lit?(x): lit(lit-value(x) * lit-value(x)) else: unary("square", x)
 public defn abs (x:FloField) -> FloField :
-  if lit?(x): lit(abs(lit-value(x))) else: unary("abs", x)
+  if lit?(x): lit(abs(lit-value(x))) else: max(x, (- x))
 public defn sin (x:FloField) -> FloField : 
   if lit?(x): lit(sin(lit-value(x))) else: unary("sin", x)
 public defn cos (x:FloField) -> FloField : 
@@ -580,7 +589,7 @@ public defn modulo (a:Vec3Field, b:Vec3Field) -> Vec3Field :
             x(a) * y(b) - y(a) * x(b))
 
 public defn with-xyz (mat:Mat44, f:(Vec3Field) -> Vec3Field, s:Shape) -> Shape :
-  Shape(fn (p): fab(s, f(p)), mat * bounds(s), to-tuple $ seq({mat * _} points(s)))
+  Shape(fn (p): fab(s, f(p)), mat * bounds(s), tags(s), to-tuple $ seq({mat * _} points(s)))
 
 public defmethod xyz (mat:Mat44, s:Shape) -> Shape :
   with-xyz(mat, fn (p) : inverse(mat) * p, s)
@@ -708,6 +717,7 @@ public defn sphere (d:Float) -> Shape :
 
 public defn bit-or (a:Shape, b:Shape) -> Shape :
   Shape(fn (p): min(fab(a, p), fab(b, p)), bounds(a) | bounds(b),
+        to-tuple $ unique $ cat(tags(a), tags(b))
         to-tuple $ cat(points(a), points(b)))
 
 public defn union (args:Seqable<Shape>) -> Shape :
@@ -715,6 +725,7 @@ public defn union (args:Seqable<Shape>) -> Shape :
 
 public defn bit-and (a:Shape, b:Shape) -> Shape :
   Shape(fn (p): max(fab(a, p), fab(b, p)), bounds(a) & bounds(b),
+        to-tuple $ unique $ cat(tags(a), tags(b))
         to-tuple $ cat(points(a), points(b)))
 
 public defn intersection (args:Seqable<Shape>) -> Shape :
@@ -734,7 +745,7 @@ public defn rem (shapes:Seqable<Shape>) -> Shape :
   rem(next(s), s)
 
 public defn offset (s:Shape, o:Float) -> Shape :
-  Shape(fn (p): fab(s, p) - lit(o), fatten(bounds(s), o), points(s))
+  Shape(fn (p): fab(s, p) - lit(o), fatten(bounds(s), o), tags(s), points(s))
   
 public defn clearance (a:Shape, b:Shape, o:Float) -> Shape :
   Shape(a & invert(offset(b, (- o))), bounds(a), points(a))
@@ -822,20 +833,21 @@ public defn cube (xy:Float, z:Float) -> Shape :
 public defn cube (v:V3f) -> Shape :
   cube(x(v), y(v), z(v))
 
-public defn box (dims:V3f) -> Shape :
-  defn fab (p) :
-    val d = abs(p) - lit(0.5f * dims)
-    min(max(x(d),max(y(d),z(d))),lit(0.0)) + len(max(d,lit(0.0)))  
-  Shape(fab, dims-to-box(dims))
+;; public defn box (dims:V3f) -> Shape :
+;;   defn fab (p) :
+;;     val d = abs(p) - lit(0.5f * dims)
+;;     min(max(x(d),max(y(d),z(d))),lit(0.0)) + len(max(d,lit(0.0)))  
+;;   Shape(fab, dims-to-box(dims))
 
 public defn box (b:Box) -> Shape :
   cube(x(lo(b)), y(lo(b)), z(lo(b)), x(hi(b)), y(hi(b)), z(hi(b)))
 
+public defn box (dims:V3f) -> Shape :
+  defn fab (p) : len(max(abs(p) - lit(0.5f * dims), lit(0.0)))
+  Shape(fab, dims-to-box(dims))
+
 public defn round-box (dims:V3f, r:Float) -> Shape :
-  defn fab (p) :
-    val d = abs(p) - lit(0.5f * dims)
-    len(max(d, lit(0.0))) - lit(r)
-  Shape(fab, fatten(dims-to-box(dims), r))
+  offset(box(dims), r)
 
 public defn cylinder (d:Float, h:Float) -> Shape :
   extrude(h, circle(d))
@@ -1092,13 +1104,14 @@ public defn slice (z:Float, s:Shape) -> Polygon :
   poly
 
 public defn pixels (z:Float, s:Shape) -> Pixels :
+  ;; println-all(["RENDER-PIXELS-START " bounds(s)])
   val bt = jit(s) as BoundedTree
   ;; val eps = *render-offset* ;; 1.0f / *resolution*
   val eps = 1.0f / *resolution*
   val bds = Box(xy(lo(bounds(s)) + V3f((- eps), (- eps), z)), xy(hi(bounds(s)) + V3f(eps, eps, z)))
   val start = current-time-ms()
   val pixels = tree-render-pixels(tree(bt), bds, *resolution*)
-  ;; println-all(["RENDER-SLICE = " to-float(current-time-ms() - start) * 0.001f])
+  ;; println-all(["RENDER-PIXELS = " to-float(current-time-ms() - start) * 0.001f])
   pixels
 
 public defn dump (filename:String, s:Shape) -> False :
@@ -1556,6 +1569,7 @@ public defstruct Config :
   n : Int
   ply-thickness : Float
   stock-dims : V3f
+  stock-boundary : V3f
   xy-quilt-dims : V3f
   quilt-parity :Int
   default-get-teeth : Box -> Shape
@@ -1564,12 +1578,12 @@ public defstruct Config :
   sames : Tuple<[Int, Int, V3f]> 
   num-extras : Int
   
-public defn Config (n:Int, t:Float, stock-dims:V3f, xy-quilt-dims:V3f, quilt-parity:Int) :
-  Config(n, t, stock-dims, xy-quilt-dims, quilt-parity,
+public defn Config (n:Int, t:Float, stock-dims:V3f, stock-boundary:V3f, xy-quilt-dims:V3f, quilt-parity:Int) :
+  Config(n, t, stock-dims, stock-boundary, xy-quilt-dims, quilt-parity,
          get-square-teeth{_, 5}, get-even-teeth{_, saw-tooth, 0, 1.0f * to-float(n) * t}, [], [], 0)
 
 public defn Config (n:Int, t:Float) :
-  Config(n, t, V2f(32.0f, 24.0f), V2f(32.0f, 24.0f), 0)
+  Config(n, t, V2f(32.0f, 24.0f), V2f(0.25f, 0.25f), V2f(32.0f, 24.0f), 0)
 
 public defn Config () : Config(1, 0.280f)
 
@@ -1608,9 +1622,42 @@ public defn explode (elt:Poseable, a:Float) :
 public defn exploded (pcs:Tuple<Shape>) :
   group $ seq(explode{_, *explosion*}, pcs)
 
+public defn pixeled (pcs:Seqable<Shape>, c:Config) :
+  for pc in pcs seq :
+    pixels(0.0f, smash(pc))
+
+public defn arranged (pcs:Tuple<Shape>, c:Config) :
+  val smashed-pcs = reverse $ to-list $ lazy-qsort({ area(dims(bounds(_))) }, seq(smash, pcs))
+  val grids = to-tuple $ seq(to-grid, pixeled(smashed-pcs, c))
+  val sdims = to-v3i(*resolution* * (stock-dims(c) - 2.0f * stock-boundary(c))) + V3i(0, 0, 1)
+  ;; val sdims = to-v3i(*resolution* * stock-dims(c)) + V3i(0, 0, 1)
+  val arrangement = Arrangement(sdims, 1.0f / *resolution*)
+  println-all(["STOCK IDIMS " stock-dims(arrangement)])
+  for (grid in grids, i in 0 to false) do :
+    ;; println-all(["ADDING " i " IDIMS " idims(grid)])
+    add(arrangement, uniquify{_, arrangement} $ SuperPart(i, grid))
+  println-all([length(pages(arrangement)) " PAGES"])
+  ;; for (p in pages(arrangement), page-num in 0 to false) seq :
+  ;;   to-pixels $ result(p)
+  for (p in pages(arrangement), page-num in 0 to false) seq :
+    group $ generate<Shape> :
+      ;; val base-off = dim(result(p)) * V2f(1.0f, 1.0f) + stock-boundary(c)
+      val base-off = stock-boundary(c) - dim(result(p)) * V2f(1.0f, 1.0f)
+      for (page-pose in poses(arrangement), pc-id in 0 to false) do :
+        if page(page-pose) == page-num :
+          val angle = angle(pose(page-pose))
+          ;; val off = pt-of(result(p), translation(pose(page-pose))) + ctr-pt(rotate(angle, grids[pc-id])) + stock-boundary(c)
+          val off = base-off + pt-of(result(p), translation(pose(page-pose))) + ctr-pt(rotate(angle, grids[pc-id]))
+          ;; println-all(["IDX " translation(pose(page-pose)) " OFF " off " ROT " angle " BOUNDS " bounds(smashed-pcs[pc-id])])
+          yield(mov(off, rot-z(to-float $ angle, smashed-pcs[pc-id])))
+
 public defn sliced (pcs:Tuple<Shape>, c:Config) :
-  for page in nested(pcs, c) seq :
-    slice(0.0f, union $ shapes $ page)
+  val pages = to-tuple $ arranged(pcs, c) ;; nested(pcs, c)
+  println-all([length(pages) " PAGES"])
+  for page in pages seq :
+    val parts = union $ shapes $ page
+    println-all(["  " dims(bounds(parts))])
+    slice(0.0f, parts)
 
 public defn group (elts:Seqable<Poseable>) : Assembly(elts)
 
