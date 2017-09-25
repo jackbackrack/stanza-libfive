@@ -4,6 +4,7 @@ defpackage ao-repl :
    import collections
    import geom
    import ao
+   import sheet
    import glu
    import font
    import utils
