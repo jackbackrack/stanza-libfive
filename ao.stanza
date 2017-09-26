@@ -182,6 +182,8 @@ public defn mov-z (d:Float) : mov-z{d, _}
 
 public defn shapes (s:Seqable<Shape>) : s
 
+public defn rgb (c:V4f) : rgb{c, _}
+
 ;;; ASSEMBLIES
 
 public deftype Assembly <: Poseable
@@ -216,7 +218,7 @@ public defmethod xyz (xf:Mat44, a:Assembly) -> Assembly :
   Assembly(mat(a) * xf, name(a), color(a), children(a))
 
 public defmethod rgb (c:V4f, a:Assembly) -> Assembly :
-  Assembly(mat(a), name(a), color(a), children(a))
+  Assembly(mat(a), name(a), c, children(a))
 
 public defmethod set-name (a:Assembly, name:Symbol) -> Assembly :
   Assembly(mat(a), name, color(a), children(a))
@@ -735,8 +737,8 @@ defn points (a:Shape, b:Shape) :
 public defn bit-or (a:Shape, b:Shape) -> Shape :
   Shape(fn (p): min(fab(a, p), fab(b, p)), bounds(a) | bounds(b), name(a, b), tags(a, b), points(a, b))
 
-public defn union (args:Seqable<Shape>) -> Shape :
-  reduce(bit-or, empty(), args)
+public defn union (args:Seqable<Poseable>) -> Shape :
+  reduce(bit-or, empty(), cat-all(seq(shapes, args)))
 
 public defn bit-and (a:Shape, b:Shape) -> Shape :
   Shape(fn (p): max(fab(a, p), fab(b, p)), bounds(a) & bounds(b), name(a, b), tags(a, b), points(a, b))
@@ -1048,15 +1050,15 @@ public defn space-x<?T> (seps:Seqable<Float>, shapes:Seqable<?T&Poseable>) : spa
 public defn space-y<?T> (seps:Seqable<Float>, shapes:Seqable<?T&Poseable>) : space-idx(seps, 1, shapes)
 public defn space-z<?T> (seps:Seqable<Float>, shapes:Seqable<?T&Poseable>) : space-idx(seps, 2, shapes)
 
-public defn uniform-space-idx<?T> (n:Int, sep:Float, idx:Int, shape:?T&Poseable) -> Seq<T> :
+public defn space-idx<?T> (n:Int, sep:Float, idx:Int, shape:?T&Poseable) -> Seq<T> :
   space-idx(repeat(sep, n - 1), idx, repeat(shape, n))
 
-public defn uniform-space-x<?T> (n:Int, sep:Float, shape:?T&Poseable) : uniform-space-idx(n, sep, 0, shape)
-public defn uniform-space-y< ?T> (n:Int, sep:Float, shape:?T&Poseable) : uniform-space-idx(n, sep, 1, shape)
-public defn uniform-space-z<?T> (n:Int, sep:Float, shape:?T&Poseable) : uniform-space-idx(n, sep, 2, shape)
-public defn uniform-space-x (n:Int, sep:Float) : uniform-space-idx{n, sep, 0, _}
-public defn uniform-space-y (n:Int, sep:Float) : uniform-space-idx{n, sep, 1, _}
-public defn uniform-space-z (n:Int, sep:Float) : uniform-space-idx{n, sep, 2, _}
+public defn space-x<?T> (n:Int, sep:Float, shape:?T&Poseable) : space-idx(n, sep, 0, shape)
+public defn space-y< ?T> (n:Int, sep:Float, shape:?T&Poseable) : space-idx(n, sep, 1, shape)
+public defn space-z<?T> (n:Int, sep:Float, shape:?T&Poseable) : space-idx(n, sep, 2, shape)
+public defn space-x (n:Int, sep:Float) : space-idx{n, sep, 0, _}
+public defn space-y (n:Int, sep:Float) : space-idx{n, sep, 1, _}
+public defn space-z (n:Int, sep:Float) : space-idx{n, sep, 2, _}
 
 defn align-it<?T> (ishapes:Seqable<?T&Poseable>, value:(Box) -> Float, mov:(Float, T) -> T) -> Seq<T> :
   val shapes = to-tuple(ishapes)

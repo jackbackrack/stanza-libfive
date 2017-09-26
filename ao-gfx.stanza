@@ -18,7 +18,6 @@ defmethod render (bt:BoundedTree) -> False :
     ;; tree-save(tree(bt), filename)
     val start-time = current-time-ms()
     val bds = fatten(bounds(bt), V3f-fill(*render-offset*))
-    ;; println("C")
     val res = tree-render-mesh(tree(bt), bds, *resolution*)
     val mesh-time = current-time-ms()
     println-all(["MESH-" num " " dims(bds) " RENDER " to-float(mesh-time - start-time) * 0.001f " SECS"])
