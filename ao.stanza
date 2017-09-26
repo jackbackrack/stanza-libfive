@@ -812,6 +812,18 @@ public defn trim (v0:V3f, v1:V3f, s:Shape) -> Shape :
   val res = s & edge(v0, v1)
   Shape(fabber(res), bounds(s))
 
+public defn abs-x (s:Shape) -> Shape :
+  val res = s & edge(V2f(0.0f, neg-inf), V2f(0.0f, pos-inf))
+  val new-bounds = Box(set-elt(lo(bounds(s)), 0, max(lo(bounds(s))[0], 0.0f)),
+                       set-elt(hi(bounds(s)), 0, max(hi(bounds(s))[0], 0.0f)))
+  Shape(fabber(res), new-bounds)
+
+public defn abs-y (s:Shape) -> Shape :
+  val res = s & edge(V2f(neg-inf, 0.0f), V2f(pos-inf, 0.0f))
+  val new-bounds = Box(set-elt(lo(bounds(s)), 1, max(lo(bounds(s))[1], 0.0f)),
+                       set-elt(hi(bounds(s)), 1, max(hi(bounds(s))[1], 0.0f)))
+  Shape(fabber(res), new-bounds)
+
 public defn to-field2 (m:Mesh) -> Shape :
   val verts = vertices(m)
   union(for face in faces(m) seq :
@@ -830,6 +842,8 @@ defn extrude (zmin:Float, zmax:Float, shape:Shape) -> Shape :
 
 public defn extrude (h:Float, shape:Shape) -> Shape :
   extrude(dim-min(h), dim-max(h), shape)
+
+public defn extrude (h:Float) : extrude{h, _}
 
 ;;; DEPRECATE
 defn cube (xmin:Float, ymin:Float, zmin:Float, xmax:Float, ymax:Float, zmax:Float) -> Shape :
@@ -857,10 +871,12 @@ public defn cube (v:V3f) -> Shape :
 public defn box (b:Box) -> Shape :
   cube(x(lo(b)), y(lo(b)), z(lo(b)), x(hi(b)), y(hi(b)), z(hi(b)))
 
+;; TODO: BROKEN
 public defn box (dims:V3f) -> Shape :
   defn fab (p) : len(max(abs(p) - lit(0.5f * dims), lit(0.0)))
   Shape(fab, dims-to-box(dims))
 
+;; TODO: BROKEN
 public defn round-box (dims:V3f, r:Float) -> Shape :
   offset(box(dims), r)
 
