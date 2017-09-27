@@ -230,11 +230,13 @@ public defstruct BoundedTree <: AnyTree :
   field: FloField
 
 public defn bounds (t:BoundedTree) : bounds(shape(t))
+public defn name (t:BoundedTree) : name(shape(t))
 public defn tree (t:BoundedTree) : tree(field(t))
 public defn mesh (t:BoundedTree) : mesh(shape(t))
 public defn set-mesh (t:BoundedTree, m:Mesh) : set-mesh(shape(t), m)
 
 public defstruct TreeAssembly <: AnyTree :
+  name  : False|Symbol
   mat   : Mat44
   color : V4f
   trees : Tuple<AnyTree>
@@ -1115,7 +1117,7 @@ defmethod jit-poseable (s:Shape) -> BoundedTree :
   BoundedTree(s, e)
 
 defmethod jit-poseable (a:Assembly) -> TreeAssembly :
-  TreeAssembly(mat(a), color(a), to-tuple $ seq(jit-poseable, children(a)))
+  TreeAssembly(name(a), mat(a), color(a), to-tuple $ seq(jit-poseable, children(a)))
 
 public defn jit (g:Geom) -> Geom :
   match(g) :
