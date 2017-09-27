@@ -1053,7 +1053,7 @@ public defn stack-z (d:Float) : stack-z{d, _}
 
 public defn space-idx<?T> (iseps:Seqable<Float>, idx:Int, shapes:Seqable<?T&Poseable>) -> Seq<T> :
   val seps = to-tuple $ iseps
-  val tot = reduce(plus, seps)
+  val tot = reduce(plus, 0.0f, seps)
   val start = -0.5f * tot
   val offs = generate<Float> :
     let loop (off = start, i = 0) :
