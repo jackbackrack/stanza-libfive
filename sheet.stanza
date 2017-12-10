@@ -10,8 +10,6 @@ defpackage sheet :
   import grid
   import nester
 
-;;; PLATES
-
 public var *explosion* = 0.25f
 
 public defn weld (i-a-shapes:Seqable<Shape>, i-b-shapes:Seqable<Shape>) -> Seqable<Shape> :
@@ -536,7 +534,8 @@ public defn arranged (pcs:Tuple<Shape>, c:Config) :
           yield(mov(off, rot-z(to-float $ angle, smashed-pcs[pc-id])))
 
 public defn sliced (pcs:Tuple<Shape>, c:Config) :
-  val pages = to-tuple $ arranged(pcs, c) ;; nested(pcs, c)
+  ;; val pages = to-tuple $ arranged(pcs, c) ;; 
+  val pages = to-tuple $ nested(pcs, c)
   println-all([length(pages) " PAGES"])
   for page in pages seq :
     val parts = union $ shapes $ page

@@ -11,7 +11,7 @@ ${GEN}/ao-repl.pkg: stanza-ao/ao-repl.stanza ${GEN}/geom.pkg ${GEN}/ao.pkg ${GEN
 	stanza $< $(STZ_FLAGS)
 
 ${GEN}/eval-ao-repl.stanza: ${GEN}/gen-repl ${GEN}/eval.pkg ${GEN}/ao-repl.pkg 
-	${GEN}/gen-repl ao-repl
+	${GEN}/gen-repl ${STANZADIR} ao-repl
 
 ${GEN}/eval-ao-repl.pkg: ${GEN}/eval-ao-repl.stanza 
 	stanza ${GEN}/eval-ao-repl.stanza $(STZ_FLAGS)

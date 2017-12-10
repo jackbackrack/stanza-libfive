@@ -898,6 +898,10 @@ public defn capsule (d:Float, h:Float) -> Shape :
   val r = 0.5f * h
   cylinder(d, h) | mov-z(r, sphere(d)) | mov-z((- r), sphere(d))
 
+public defn capsule2 (w:Float, h:Float) -> Shape :
+  val r = 0.5f * w
+  rect(w, h) | mov-x(r, circle(h)) | mov-x((- r), circle(h))
+
 public defn capsule2 (a:V3f, b:V3f, d:Float) -> Shape :
   val r  = 0.5f * d
   defn fab (p) :
@@ -950,20 +954,24 @@ public defn spacer-x (gdim:Float) : spacer-x(gdim, empty())
 public defn spacer-y (gdim:Float) : spacer-y(gdim, empty())
 public defn spacer-z (gdim:Float) : spacer-z(gdim, empty())
 
-public defn stack-idx<?T> (ishapes:Seqable<?T&Poseable>, idx:Int, dir:Float) -> Seq<T> :
-  val shapes = to-tuple(ishapes)
-  val tot = reduce(plus, for shape in shapes seq : dims(bounds(shape))[idx])
+public defn stack-idx-using<?T> (ishapes:Seqable<?T&Poseable>, iboundz:Seqable<Box>, idx:Int, dir:Float) -> Seq<T> :
+  val [shapes, boundz] = [to-tuple(ishapes), to-tuple(iboundz)]
+  val tot = reduce(plus, for bounds in boundz seq : dims(bounds)[idx])
   var tot-fac = 0.0f
   val res =
     generate<T&Poseable> :
-      for (child in shapes, i in 0 to false) do :
-        val now-fac = dims(bounds(child))[idx] / tot
-        val ctr     = center(bounds(child))[idx]
+      for (child in shapes, bounds in boundz) do :
+        val now-fac = dims(bounds)[idx] / tot
+        val ctr     = center(bounds)[idx]
         val amount  = dir * (tot / 2.0f - (tot-fac + now-fac / 2.0f) * tot) - ctr
         val del     = amount * V3f-unit(idx)
         yield(mov(del, child))
         tot-fac = tot-fac + now-fac
   filter({ volume(dims(bounds(_))) > 0.0f }, res)
+
+public defn stack-idx<?T> (ishapes:Seqable<?T&Poseable>, idx:Int, dir:Float) -> Seq<T> :
+  val shapes = to-tuple $ ishapes
+  stack-idx-using(shapes, seq(bounds, shapes), idx, dir)
 
 public defn stack-x<?T> (shapes:Seqable<?T&Poseable>) -> Seq<T> :
   stack-idx(shapes, 0,  1.0f)
@@ -1032,13 +1040,13 @@ public defn assign-glue-idx<?T> (ishapes:Seqable<?T&Poseable>, target:Float, idx
         spacer(shape, s)
       (s)           : s
 
-public defn interleave<?T> (a:Seqable<?T&Poseable>, b:Seqable<?T&Poseable>) -> Seq<T> :
-  generate<T> :
-    val [sa, sb] = [to-seq(a), to-seq(b)]
-    let loop (a?:True|False = true) :
-      if not empty?(sa) and not empty?(sa):
-        yield(next(sa) when a? else next(sb))
-        loop(not a?)
+;; public defn interleave<?T> (a:Seqable<?T&Poseable>, b:Seqable<?T&Poseable>) -> Seq<T> :
+;;   generate<T> :
+;;     val [sa, sb] = [to-seq(a), to-seq(b)]
+;;     let loop (a?:True|False = true) :
+;;       if not empty?(sa) and not empty?(sa):
+;;         yield(next(sa) when a? else next(sb))
+;;         loop(not a?)
 
 public defn stack-idx<?T> (d:Float, idx:Int, shapes:Seqable<?T&Poseable>) -> Seq<T> :
   stack-idx(assign-glue-idx(shapes, d, idx), idx, 1.0f)
@@ -1053,8 +1061,9 @@ public defn stack-x (w:Float) : stack-x{w, _}
 public defn stack-y (h:Float) : stack-y{h, _}
 public defn stack-z (d:Float) : stack-z{d, _}
 
-public defn space-idx<?T> (iseps:Seqable<Float>, idx:Int, shapes:Seqable<?T&Poseable>) -> Seq<T> :
-  val seps = to-tuple $ iseps
+public defn space-idx<?T> (iseps:Seqable<Float>, idx:Int, ishapes:Seqable<?T&Poseable>) -> Seq<T> :
+  val shapes = to-tuple $ ishapes
+  val seps = to-tuple $ for (sep in iseps, i in 0 to (length(shapes) - 1)) seq : sep
   val tot = reduce(plus, 0.0f, seps)
   val start = -0.5f * tot
   val offs = generate<Float> :
@@ -1068,15 +1077,18 @@ public defn space-x<?T> (seps:Seqable<Float>, shapes:Seqable<?T&Poseable>) : spa
 public defn space-y<?T> (seps:Seqable<Float>, shapes:Seqable<?T&Poseable>) : space-idx(seps, 1, shapes)
 public defn space-z<?T> (seps:Seqable<Float>, shapes:Seqable<?T&Poseable>) : space-idx(seps, 2, shapes)
 
-public defn space-idx<?T> (n:Int, sep:Float, idx:Int, shape:?T&Poseable) -> Seq<T> :
-  space-idx(repeat(sep, n - 1), idx, repeat(shape, n))
+public defn space-idx<?T> (sep:Float, idx:Int, shapes:Seqable<?T&Poseable>) -> Seq<T> :
+  space-idx(repeatedly({ sep }), idx, shapes)
 
-public defn space-x<?T> (n:Int, sep:Float, shape:?T&Poseable) : space-idx(n, sep, 0, shape)
-public defn space-y< ?T> (n:Int, sep:Float, shape:?T&Poseable) : space-idx(n, sep, 1, shape)
-public defn space-z<?T> (n:Int, sep:Float, shape:?T&Poseable) : space-idx(n, sep, 2, shape)
-public defn space-x (n:Int, sep:Float) : space-idx{n, sep, 0, _}
-public defn space-y (n:Int, sep:Float) : space-idx{n, sep, 1, _}
-public defn space-z (n:Int, sep:Float) : space-idx{n, sep, 2, _}
+public defn space-x<?T> (sep:Float, shapes:Seqable<?T&Poseable>) : space-idx(sep, 0, shapes)
+public defn space-y<?T> (sep:Float, shapes:Seqable<?T&Poseable>) : space-idx(sep, 1, shapes)
+public defn space-z<?T> (sep:Float, shapes:Seqable<?T&Poseable>) : space-idx(sep, 2, shapes)
+
+public defn space-idx (sep:Float, idx:Int) : space-idx{repeatedly({ sep }), idx, _}
+
+public defn space-x (sep:Float) : space-idx(sep, 0)
+public defn space-y (sep:Float) : space-idx(sep, 1)
+public defn space-z (sep:Float) : space-idx(sep, 2)
 
 defn align-it<?T> (ishapes:Seqable<?T&Poseable>, value:(Box) -> Float, mov:(Float, T) -> T) -> Seq<T> :
   val shapes = to-tuple(ishapes)
@@ -1153,9 +1165,11 @@ public defn dump (filename:String, s:Shape) -> False :
 
 public defn save (z:Float, filename:String, s:Shape) -> False :
   val bt = jit(s) as BoundedTree
-  tree-save-slice(tree(bt), filename, bounds(s), *resolution*)
+  val eps = 1.0f / *resolution*
+  tree-save-slice(tree(bt), filename, fatten(bounds(s), eps), *resolution*)
 
 public defn save (filename:String, s:Shape) -> False :
   val bt = jit(s) as BoundedTree
-  tree-save-mesh(tree(bt), filename, bounds(s), *resolution*)
+  val eps = 1.0f / *resolution*
+  tree-save-mesh(tree(bt), filename, fatten(bounds(s), eps), *resolution*)
 
