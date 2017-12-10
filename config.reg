@@ -1,0 +1,14 @@
+defregistry stanza-ao :
+  file "ao.cpp" :
+    flags "-std=c++11 -I/usr/local/include/eigen3"
+  file "ao.stanza" :
+    package ao :
+      dependency "${GEN}/ao.o"
+      link * "${GEN}/ao.o -lao-kernel -lc++"
+  file "sheet.stanza"
+  file "ao-gfx.stanza"
+  file "ao-eval.stanza"
+  file "ao-repl.stanza"
+  file "eval-ao-repl.stanza" gen :
+    package eval-ao-repl
+  file "ao-eval.stanza"
