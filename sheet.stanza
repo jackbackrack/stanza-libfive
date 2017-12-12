@@ -46,13 +46,13 @@ public defn weld (a-shapes:Poseable, b-shapes:Poseable) -> Seqable<Shape> :
 public defn weld (poseables:Seqable<Poseable>) -> Seqable<Shape> :
   reduce(weld, seq(shapes, poseables))
 
-public defn square-tooth (i:Box, n-slots:Int) -> Shape :
+public defn square-tooth (i:Boxf, n-slots:Int) -> Shape :
   val idx       = max-idx(dims(i))
   val max-dim   = dims(i)[idx]
   val slot-dim  = max-dim / to-float(n-slots)
-  cube(V3f(slot-dim, pos-inf, pos-inf))
+  cube(V3f(slot-dim, pos-inf-f, pos-inf-f))
 
-public defn saw-tooth (i:Box, n-slots:Int) -> Shape :
+public defn saw-tooth (i:Boxf, n-slots:Int) -> Shape :
   val idx       = max-idx(dims(i))
   val max-dim   = dims(i)[idx]
   val slot-dim  = max-dim / to-float(n-slots)
@@ -62,7 +62,7 @@ public defn saw-tooth (i:Box, n-slots:Int) -> Shape :
   val zd        = dims(i)[min-idx(dims(i))]
   extrude(zd, triangle(V2f(xr, (- yr)), V2f(0.0f, yr), V2f((- xr), (- yr))))
 
-public defn get-even-teeth (i:Box, get-tooth:(Box, Int) -> Shape, i-n-slots:Int, slot-size:Float) -> Shape :
+public defn get-even-teeth (i:Boxf, get-tooth:(Boxf, Int) -> Shape, i-n-slots:Int, slot-size:Float) -> Shape :
   val idx       = max-idx(dims(i))
   val max-dim   = dims(i)[idx]
   val n-slots   = i-n-slots when i-n-slots > 0 else (((to-int $ floor $ max-dim / slot-size) / 2) * 2 + 1)
@@ -76,11 +76,11 @@ public defn get-even-teeth (i:Box, get-tooth:(Box, Int) -> Shape, i-n-slots:Int,
   union $ stack-x(max-dim, glued-teeth)
   ;; println-all(["N-SLOTS " n-slots " DIMS " dims(i) " MAX-IDX " idx " SLOT-DIM " slot-dim " CTRI " center(i) " TDIMS " dims(bounds(tooths))])
 
-public defn get-square-teeth (i:Box, n-slots:Int, slot-size:Float) :
+public defn get-square-teeth (i:Boxf, n-slots:Int, slot-size:Float) :
   get-even-teeth(i, square-tooth, n-slots, slot-size)
 
-public defn get-square-teeth (i:Box, slot-size:Float) : get-square-teeth(i, 0, slot-size)
-public defn get-square-teeth (i:Box, n-slots:Int) : get-square-teeth(i, n-slots, 0.0f)
+public defn get-square-teeth (i:Boxf, slot-size:Float) : get-square-teeth(i, 0, slot-size)
+public defn get-square-teeth (i:Boxf, n-slots:Int) : get-square-teeth(i, n-slots, 0.0f)
 
 public defn rot-mat44 (src:V3f, dst:V3f) -> Mat44 :
   if src == dst :
@@ -105,7 +105,7 @@ public defn rot-mat44 (src0:Int, src1:Int, dst0:Int, dst1:Int) -> Mat44 :
   ;; println-all(["ROT-MAT44 S0 " src0 " S1 " src1 " D0 " dst0 " D1 " dst1])
   rot-mat44(V3f-unit(src0), V3f-unit(src1), V3f-unit(dst0), V3f-unit(dst1))
 
-public defn join-two-pieces (a:Shape, b:Shape, get-teeth:Box -> Shape) -> [Shape, Shape] :
+public defn join-two-pieces (a:Shape, b:Shape, get-teeth:Boxf -> Shape) -> [Shape, Shape] :
   val i          = fatten(bounds(a) & bounds(b), EPS)
   val overlap    = box(i)
   val mid-idx    = mid-idx(dims(bounds(overlap)))
@@ -155,14 +155,14 @@ public defn all-combos (a:Seqable<Int>, b:Seqable<Int>) -> Seqable<[Int, Int]> :
 
 val EPS = 0.001f
 
-public defn full-captured-on? (i:Box, a:Box, d:Int) :
+public defn full-captured-on? (i:Boxf, a:Boxf, d:Int) :
   ;; val res = abs(lo(i)[d] - lo(a)[d]) > EPS and abs(hi(a)[d] - hi(i)[d]) > EPS
   val res = (lo(i)[d] - lo(a)[d]) > EPS and (hi(a)[d] - hi(i)[d]) > EPS
   ;; println-all(["CAPTURED-ON? " i " / " a " D " d " -> " res])
   res
 
-public defn captured? (b1:Box, b2:Box) -> True|False :
-  defn any-captured? (i:Box, a:Box, big-d:Int) :
+public defn captured? (b1:Boxf, b2:Boxf) -> True|False :
+  defn any-captured? (i:Boxf, a:Boxf, big-d:Int) :
     val res = any?(full-captured-on?{i, a, _}, filter({ _ != big-d}, 0 to 3))
     ;; println-all(["ANY-CAPTURED? " i " / " a " big-d " big-d " -> " res])
     res
@@ -176,7 +176,7 @@ defn n-smalls (dims:V3f) :
   ;; println-all(["N-SMALLS ELTS " elts " N " n + 1])
   n + 1
 
-public defn full-captured2d? (b1:Box, b2:Box) -> True|False :
+public defn full-captured2d? (b1:Boxf, b2:Boxf) -> True|False :
   if n-smalls(dims(b1 & b2)) == 1 :
     val i = b1 & b2
     val [d0, d1] = [mid-idx(dims(i)), max-idx(dims(i))]
@@ -186,19 +186,19 @@ public defn full-captured2d? (b1:Box, b2:Box) -> True|False :
   else :
     false
 
-public defn abutt-captured-on? (a:Box, b:Box, d:Int, dir:Int) :
+public defn abutt-captured-on? (a:Boxf, b:Boxf, d:Int, dir:Int) :
   val hi? = lo(b)[d] - lo(a)[d] > EPS and abs(hi(b)[d] - hi(a)[d]) < EPS
   val lo? = abs(lo(b)[d] - lo(a)[d]) < EPS and hi(a)[d] - hi(b)[d] > EPS
   val res = lo? when dir == -1 else hi?
   ;; println-all(["  PARTIAL-CAPTURED-ON? D " d " DIR " dir " A " a " B " b " RES " res])
   res
 
-public defn abutt-captured-on? (a:Box, b:Box, d:Int) :
+public defn abutt-captured-on? (a:Boxf, b:Boxf, d:Int) :
   val res = (lo(b)[d] - lo(a)[d]) > (- EPS) and (hi(a)[d] - hi(b)[d]) > (- EPS)
   ;; println-all(["  PARTIAL-CAPTURED-ON? D " d " pA " a " B " b " RES " res])
   res
 
-public defn abutt-captured2d? (b1:Box, b2:Box) -> True|False :
+public defn abutt-captured2d? (b1:Boxf, b2:Boxf) -> True|False :
   val i = b1 & b2
   if n-smalls(dims(i)) == 1 :
     val [d0, d1] = [mid-idx(dims(i)), max-idx(dims(i))]
@@ -212,13 +212,13 @@ public defn abutt-captured2d? (b1:Box, b2:Box) -> True|False :
     false
 
 public defn join-pieces (elts:Seqable<Shape>,
-                         default-get-teeth:Box -> Shape,
-                         abutt-get-teeth:Box -> Shape,
-                         get-teeths:Tuple<KeyValue<[Int,Int], (Box -> Shape)>>,
+                         default-get-teeth:Boxf -> Shape,
+                         abutt-get-teeth:Boxf -> Shape,
+                         get-teeths:Tuple<KeyValue<[Int,Int], (Boxf -> Shape)>>,
                          sames:Tuple<[Int, Int, V3f]>) :
   val pieces = to-array<Shape> $ elts
-  defn lookup-get-teeth (i:Int, j:Int) -> (Box -> Shape) :
-    label<(Box -> Shape)> return :  
+  defn lookup-get-teeth (i:Int, j:Int) -> (Boxf -> Shape) :
+    label<(Boxf -> Shape)> return :  
       for kv in get-teeths do :
         val [ki, kj] = key(kv)
         if (ki == i and kj == j) or (ki == j and kj == i) :
@@ -249,8 +249,8 @@ defn split-full-overlap (s0:Shape, s1:Shape, t:Float) -> [Shape, Shape] :
   val i = bounds(s0) & bounds(s1)
   val d = max-idx(dims(bounds(s0)))
   val o = dims(i)[d] / 3.0f
-  val s0a = s0 & box(Box(lo(bounds(s0)), set-elt(hi(bounds(s0)), d, lo(i)[d] + o)))
-  val s0b = s0 & box(Box(set-elt(lo(bounds(s0)), d, hi(i)[d] - o), hi(bounds(s0))))
+  val s0a = s0 & box(Boxf(lo(bounds(s0)), set-elt(hi(bounds(s0)), d, lo(i)[d] + o)))
+  val s0b = s0 & box(Boxf(set-elt(lo(bounds(s0)), d, hi(i)[d] - o), hi(bounds(s0))))
   [s0a s0b]
 
 defstruct Abuttment :
@@ -283,8 +283,8 @@ defn split-abutt-overlap (i0:Int, s0:Shape, i1:Int, s1:Shape, t:Float) -> [Int, 
   else :
     val a   = sabuttments[0]
     val o   = dims(i)[d(a)] / 3.0f
-    val nsh = s(a) & box(Box(lo(bounds(s(a))), set-elt(hi(bounds(s(a))), d(a), lo(i)[d(a)] + o)))
-    val nsl = s(a) & box(Box(set-elt(lo(bounds(s(a))), d(a), hi(i)[d(a)] - o), hi(bounds(s(a)))))
+    val nsh = s(a) & box(Boxf(lo(bounds(s(a))), set-elt(hi(bounds(s(a))), d(a), lo(i)[d(a)] + o)))
+    val nsl = s(a) & box(Boxf(set-elt(lo(bounds(s(a))), d(a), hi(i)[d(a)] - o), hi(bounds(s(a)))))
     val ns  = nsl when dir(a) == -1 else nsh
     [k(a), ns]
 
@@ -327,7 +327,7 @@ public defn split-overlaps (elts:Seqable<Shape>, t:Float) -> Seqable<Shape> :
 ;;   val res = to-tuple $ for i in 0 to (n + ni) seq :
 ;;     val l = o + ((to-float(i) + phase)     * g - t)
 ;;     val h = o + ((to-float(i + 1) + phase) * g + t)
-;;     s & box(Box(set-elt(lo(bds), d0, l), set-elt(hi(bds), d0, h)))
+;;     s & box(Boxf(set-elt(lo(bds), d0, l), set-elt(hi(bds), d0, h)))
 ;;   println-all(["SPLIT MX " mx " D0 " d0 " D1 " d1 " PHASE " phase " -> " to-tuple $ seq(bounds, res)])
 ;;   res
 
@@ -341,7 +341,7 @@ defn quilt-one (s:Shape, mx:Float, d0:Int, d1:Int, t:Float, parity:Int) -> Seqab
   val res = to-tuple $ for i in 0 to (n + ni) seq :
     val l = o + ((to-float(i) + phase)     * g - t)
     val h = o + ((to-float(i + 1) + phase) * g + t)
-    s & box(Box(set-elt(lo(bds), d0, l), set-elt(hi(bds), d0, h)))
+    s & box(Boxf(set-elt(lo(bds), d0, l), set-elt(hi(bds), d0, h)))
   println-all(["SPLIT MX " mx " D0 " d0 " D1 " d1 " N " n " PHASE " phase " -> " to-tuple $ seq(bounds, res)])
   res
 
@@ -367,7 +367,7 @@ public defn quilt (shape:Shape, stock-dims:V3f, parity:Int) -> Seqable<Shape> :
     val splits-0 = quilt-one(shape, sorted-stock-dims[2], max-idx(shape-dims), mid-idx(shape-dims), t, parity)
     to-tuple $ cat-all $ seq(quilt-one{_, sorted-stock-dims[1], mid-idx(shape-dims), max-idx(shape-dims), t, parity}, splits-0)
 
-public defn join-pieces (elts:Seqable<Shape>, get-teeth:Box -> Shape) :
+public defn join-pieces (elts:Seqable<Shape>, get-teeth:Boxf -> Shape) :
   join-pieces(elts, get-teeth, get-teeth, [], [])
 
 ;; TODO: LIMITED TO AXIS ALIGNED SHAPES
@@ -454,9 +454,9 @@ public defstruct Config :
   stock-boundary : V3f
   xy-quilt-dims : V3f
   quilt-parity :Int
-  default-get-teeth : Box -> Shape
-  default-get-abutt-teeth : Box -> Shape
-  get-teeths : Tuple<KeyValue<[Int,Int], (Box -> Shape)>>
+  default-get-teeth : Boxf -> Shape
+  default-get-abutt-teeth : Boxf -> Shape
+  get-teeths : Tuple<KeyValue<[Int,Int], (Boxf -> Shape)>>
   sames : Tuple<[Int, Int, V3f]> 
   num-extras : Int
   
@@ -548,5 +548,5 @@ public defn svgd (c:Config, res:Results) :
   for (slice in sliced(pcs(res), c), i in 0 to false) do :
     val mag-sliced = mag-mat44(V2f(72.0f, 72.0f)) * slice
     val half = 0.5f * stock-dims(c)
-    val bbox = Box(-72.0f * half, 72.0f * half)
+    val bbox = Boxf(-72.0f * half, 72.0f * half)
     svg(mag-sliced, string-join(["tst-" i ".svg"]), bbox)

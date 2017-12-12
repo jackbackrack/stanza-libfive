@@ -162,7 +162,7 @@ defmethod count (f:FloFieldOp) -> Int :
   1 + reduce(plus, 0, seq(count, args(f)))
 
 public deftype Poseable <: Geom
-public defmulti bounds (p:Poseable) -> Box
+public defmulti bounds (p:Poseable) -> Boxf
 public defmulti color (p:Poseable) -> V4f
 public defmulti tags (p:Poseable) -> Tuple<Symbol>
 public defmulti name (p:Poseable) -> False|Symbol
@@ -249,7 +249,7 @@ public defmulti cache (s:Shape) -> HashTable<Vec3Field,FloField>
 public defmulti mesh (s:Shape) -> False|Mesh
 public defmulti set-mesh (s:Shape, m:Mesh) -> False
 
-public defn Shape (fabber:(Vec3Field) -> FloField, bounds:Box, name:False|Symbol, tags:Tuple<Symbol>, points:Tuple<V3f>) :
+public defn Shape (fabber:(Vec3Field) -> FloField, bounds:Boxf, name:False|Symbol, tags:Tuple<Symbol>, points:Tuple<V3f>) :
   val cache = HashTable<Vec3Field,FloField>()
   var mesh:False|Mesh = false
   new Shape :
@@ -263,7 +263,7 @@ public defn Shape (fabber:(Vec3Field) -> FloField, bounds:Box, name:False|Symbol
     defmethod mesh (this) : mesh
     defmethod set-mesh (this, m:Mesh) : mesh = m
 
-public defn Shape (fabber:(Vec3Field) -> FloField, bounds:Box) :
+public defn Shape (fabber:(Vec3Field) -> FloField, bounds:Boxf) :
   Shape(fabber, bounds, false, [], [])
 
 public defn add-points (s:Shape, points:Tuple<V3f>) :
@@ -302,10 +302,10 @@ defn fab (s:Shape, p:Vec3Field) -> FloField :
   ;;   ;;   println-all(["MISS " to-tuple $ keys(cache(s))])
   ;;   f
 
-public defn Shape (s:Shape, bounds:Box, name:False|Symbol, tags:Tuple<Symbol>, points:Tuple<V3f>) :
+public defn Shape (s:Shape, bounds:Boxf, name:False|Symbol, tags:Tuple<Symbol>, points:Tuple<V3f>) :
   Shape(fabber(s), bounds, name, tags, points)
 
-public defn Shape (s:Shape, bounds:Box) :
+public defn Shape (s:Shape, bounds:Boxf) :
   Shape(s, bounds, name(s), tags(s), points(s))
 
 public lostanza defn tree-delete (t:ref<Tree>) -> ref<False> :
@@ -316,11 +316,11 @@ public lostanza defn tree-save (t:ref<Tree>, filename:ref<String>) -> ref<False>
   call-c ao_tree_save(t.value, addr!(filename.chars))
   return false
 
-public lostanza defn tree-save-mesh (t:ref<Tree>, filename:ref<String>, box:ref<Box>, res:ref<Float>) -> ref<False> :
+public lostanza defn tree-save-mesh (t:ref<Tree>, filename:ref<String>, box:ref<Boxf>, res:ref<Float>) -> ref<False> :
   call-c ao_tree_save_mesh_spread(t.value, x(lo(box)).value, x(hi(box)).value, y(lo(box)).value, y(hi(box)).value, z(lo(box)).value, z(hi(box)).value, res.value, addr!(filename.chars))
   return false
 
-public lostanza defn tree-save-slice (t:ref<Tree>, filename:ref<String>, box:ref<Box>, res:ref<Float>) -> ref<False> :
+public lostanza defn tree-save-slice (t:ref<Tree>, filename:ref<String>, box:ref<Boxf>, res:ref<Float>) -> ref<False> :
   call-c ao_tree_save_slice_spread(t.value, x(lo(box)).value, x(hi(box)).value, y(lo(box)).value, y(hi(box)).value, z(lo(box)).value, res.value, addr!(filename.chars))
   return false
 
@@ -348,7 +348,7 @@ defn to-mesh (rm:AoMesh) -> Mesh :
   ;;   println-all(["STZ VERT " i " " vert])
   Mesh(verts, tris)
 
-public lostanza defn tree-render-mesh (t:ref<Tree>, box:ref<Box>, res:ref<Float>) -> ref<Mesh> :
+public lostanza defn tree-render-mesh (t:ref<Tree>, box:ref<Boxf>, res:ref<Float>) -> ref<Mesh> :
   val out = call-c ao_tree_render_mesh_spread(t.value, x(lo(box)).value, x(hi(box)).value, y(lo(box)).value, y(hi(box)).value, z(lo(box)).value, z(hi(box)).value, res.value)
   val c-mesh = new AoMesh{out}
   val mesh = to-mesh(c-mesh)
@@ -368,7 +368,7 @@ defn to-pixels (p:AoPixels, res:Float) -> Pixels :
   copy-bytes(data, p, tot)
   Pixels(V3i(width, height, 1), 1.0f / res, data)
 
-public lostanza defn tree-render-pixels (t:ref<Tree>, box:ref<Box>, res:ref<Float>) -> ref<Pixels> :
+public lostanza defn tree-render-pixels (t:ref<Tree>, box:ref<Boxf>, res:ref<Float>) -> ref<Pixels> :
   val out = call-c ao_tree_render_pixels_spread(t.value, x(lo(box)).value, x(hi(box)).value, y(lo(box)).value, y(hi(box)).value,  z(lo(box)).value, res.value)
   val c-pixels = new AoPixels{out}
   val pixels = to-pixels(c-pixels, res)
@@ -394,7 +394,7 @@ defn to-polygon (cs:AoContours) -> Polygon :
       Contour(to-tuple $ points)
   Polygon(to-tuple $ contours)
 
-public lostanza defn tree-render-slice (t:ref<Tree>, box:ref<Box>, res:ref<Float>) -> ref<Polygon> :
+public lostanza defn tree-render-slice (t:ref<Tree>, box:ref<Boxf>, res:ref<Float>) -> ref<Polygon> :
   val out = call-c ao_tree_render_slice_spread(t.value, x(lo(box)).value, x(hi(box)).value, y(lo(box)).value, y(hi(box)).value, z(lo(box)).value, res.value)
   val slice = new AoContours{out}
   val poly = to-polygon(slice)
@@ -417,8 +417,8 @@ public lostanza defn unary (op:ref<String>, t:ref<FloField>) -> ref<FloField> :
   return FloFieldOp(new Tree{call-c ao_tree_unary(opcode(op).value, tree(t).value)}, op, List(t))
 public lostanza defn binary (op:ref<String>, t1:ref<FloField>, t2:ref<FloField>) -> ref<FloField> :
   return FloFieldOp(new Tree{call-c ao_tree_binary(opcode(op).value, tree(t1).value, tree(t2).value)}, op, List(t1, t2))
-public defn min-lit () : lit(neg-inf)
-public defn max-lit () : lit(pos-inf)
+public defn min-lit () : lit(neg-inf-f)
+public defn max-lit () : lit(pos-inf-f)
 
 public defn nan-fill (x:FloField, y:FloField) -> FloField : binary("nan-fill", x, y)
 public defn modulo (x:FloField, y:FloField) -> FloField :
@@ -431,13 +431,13 @@ public defn times (x:FloField, y:FloField) -> FloField :
   else : binary("mul", x, y)
 public defn min (x:FloField, y:FloField) -> FloField : 
   if lit?(x) and lit?(y): lit(min(lit-value(x), lit-value(y)))
-  else if lit?(y) and lit-value(y) >= pos-inf: x
-  else if lit?(x) and lit-value(x) >= pos-inf: y
+  else if lit?(y) and lit-value(y) >= pos-inf-f: x
+  else if lit?(x) and lit-value(x) >= pos-inf-f: y
   else : binary("min", x, y)
 public defn max (x:FloField, y:FloField) -> FloField :
   if lit?(x) and lit?(y): lit(max(lit-value(x), lit-value(y)))
-  else if lit?(y) and lit-value(y) <= pos-inf: x
-  else if lit?(x) and lit-value(x) <= pos-inf: y
+  else if lit?(y) and lit-value(y) <= pos-inf-f: x
+  else if lit?(x) and lit-value(x) <= pos-inf-f: y
   else : binary("max", x, y)
 public defn divide (x:FloField, y:FloField) -> FloField : 
   if lit?(x) and lit?(y): lit(divide(lit-value(x), lit-value(y)))
@@ -715,14 +715,14 @@ public defn xy (s:Shape) -> Shape : xy(0.0f, s)
 
 public defn circle (d:Float) -> Shape :
   val r = d * 0.5f
-  Shape(fn (p): len(xy(p)) - lit(r), Box(V3f((- r), (- r), neg-inf), V3f(r, r, pos-inf)))
+  Shape(fn (p): len(xy(p)) - lit(r), Boxf(V3f((- r), (- r), neg-inf-f), V3f(r, r, pos-inf-f)))
 
 ;; public defn circle (x:FloField, y:FloField, r:FloField) -> FloField :
 ;;   mov(x, y, {circle(r)})
 
 public defn sphere (d:Float) -> Shape :
   val r = d * 0.5f
-  Shape(fn (p): len(p) - lit(r), Box(V3f((- r), (- r), (- r)), V3f(r, r, r)))
+  Shape(fn (p): len(p) - lit(r), Boxf(V3f((- r), (- r), (- r)), V3f(r, r, r)))
 
 ;; public defn sphere (x:FloField, y:FloField, z:FloField, r:FloField) -> FloField :
 ;;   mov(x, y, z, {circle(r)})
@@ -749,7 +749,7 @@ public defn intersection (args:Seqable<Shape>) -> Shape :
   reduce(bit-and, args)
 
 public defn invert (s:Shape) -> Shape :
-  Shape(fn (p): (- fab(s, p)), inf-box())
+  Shape(fn (p): (- fab(s, p)), inf-box-f())
 
 public defn rem (a:Shape, b:Shape) -> Shape :
   Shape(a & invert(b), bounds(a), name(a, b), tags(a, b), points(a, b))
@@ -779,9 +779,9 @@ public defn morph (a:Shape, b:Shape, m:Float) -> Shape :
   Shape(fn (p): fab(a, p) * (lit(1.0) - lit(m)) + fab(b, p) * lit(m), bounds(a) | bounds(b))
   
 defn rect (xmin:Float, ymin:Float, xmax:Float, ymax:Float) -> Shape :
-  val b = Box(V3f(xmin, ymin, neg-inf), V3f(xmax, ymax, pos-inf))
+  val b = Boxf(V3f(xmin, ymin, neg-inf-f), V3f(xmax, ymax, pos-inf-f))
   Shape(fn (p): max(max(lit(xmin) - x(p), x(p) - lit(xmax)), max(lit(ymin) - y(p), y(p) - lit(ymax))),
-        Box(V3f(xmin, ymin, neg-inf), V3f(xmax, ymax, pos-inf)))
+        Boxf(V3f(xmin, ymin, neg-inf-f), V3f(xmax, ymax, pos-inf-f)))
 
 public defn dim-min (d:Float) -> Float : d * -0.5f
 public defn dim-max (d:Float) -> Float : d *  0.5f
@@ -802,27 +802,27 @@ public defn square (d:Float) -> Shape :
 
 public defn edge (v0:V3f, v1:V3f) -> Shape :
   Shape(fn (p): lit(y(v1) - y(v0)) * (x(p) - lit(x(v0))) - lit(x(v1) - x(v0)) * (y(p) - lit(y(v0))),
-        Box(v0) | Box(v1))
+        Boxf(v0) | Boxf(v1))
 
 public defn convex (pts:Tuple<V3f>) -> Shape :
   val edges = for i in 0 to length(pts) seq :
                 edge(pts[i], pts[(i + 1) % length(pts)])
   val shape = reduce(fn (a:Shape, b:Shape): a & b, edges)
-  Shape(fabber(shape), reduce(bit-or, seq(Box, pts)))
+  Shape(fabber(shape), reduce(bit-or, seq(Boxf, pts)))
 
 public defn trim (v0:V3f, v1:V3f, s:Shape) -> Shape :
   val res = s & edge(v0, v1)
   Shape(fabber(res), bounds(s))
 
 public defn abs-x (s:Shape) -> Shape :
-  val res = s & edge(V2f(0.0f, neg-inf), V2f(0.0f, pos-inf))
-  val new-bounds = Box(set-elt(lo(bounds(s)), 0, max(lo(bounds(s))[0], 0.0f)),
+  val res = s & edge(V2f(0.0f, neg-inf-f), V2f(0.0f, pos-inf-f))
+  val new-bounds = Boxf(set-elt(lo(bounds(s)), 0, max(lo(bounds(s))[0], 0.0f)),
                        set-elt(hi(bounds(s)), 0, max(hi(bounds(s))[0], 0.0f)))
   Shape(fabber(res), new-bounds)
 
 public defn abs-y (s:Shape) -> Shape :
-  val res = s & edge(V2f(neg-inf, 0.0f), V2f(pos-inf, 0.0f))
-  val new-bounds = Box(set-elt(lo(bounds(s)), 1, max(lo(bounds(s))[1], 0.0f)),
+  val res = s & edge(V2f(neg-inf-f, 0.0f), V2f(pos-inf-f, 0.0f))
+  val new-bounds = Boxf(set-elt(lo(bounds(s)), 1, max(lo(bounds(s))[1], 0.0f)),
                        set-elt(hi(bounds(s)), 1, max(hi(bounds(s))[1], 0.0f)))
   Shape(fabber(res), new-bounds)
 
@@ -840,7 +840,7 @@ public defn triangle (a:V3f, b:V3f, c:V3f) -> Shape :
 defn extrude (zmin:Float, zmax:Float, shape:Shape) -> Shape :
   val b = bounds(shape)
   Shape(fn (p): max(fab(shape, p), max(lit(zmin) - z(p), z(p) - lit(zmax))),
-        Box(V3f(x(lo(b)), y(lo(b)), zmin), V3f(x(hi(b)), y(hi(b)), zmax)))
+        Boxf(V3f(x(lo(b)), y(lo(b)), zmin), V3f(x(hi(b)), y(hi(b)), zmax)))
 
 public defn extrude (h:Float, shape:Shape) -> Shape :
   extrude(dim-min(h), dim-max(h), shape)
@@ -870,7 +870,7 @@ public defn cube (v:V3f) -> Shape :
 ;;     min(max(x(d),max(y(d),z(d))),lit(0.0)) + len(max(d,lit(0.0)))  
 ;;   Shape(fab, dims-to-box(dims))
 
-public defn box (b:Box) -> Shape :
+public defn box (b:Boxf) -> Shape :
   cube(x(lo(b)), y(lo(b)), z(lo(b)), x(hi(b)), y(hi(b)), z(hi(b)))
 
 ;; TODO: BROKEN
@@ -892,7 +892,7 @@ public defn capsule (a:V3f, b:V3f, d:Float) -> Shape :
     val ba = b - a
     val h  = clamp(dot(pa, lit(ba)) / lit(dot(ba, ba)), lit(0.0), lit(1.0))
     len(pa - h * lit(ba)) - lit(r)
-  Shape(fab, fatten(Box(a, a) | Box(b, b), r))
+  Shape(fab, fatten(Boxf(a, a) | Boxf(b, b), r))
 
 public defn capsule (d:Float, h:Float) -> Shape :
   val r = 0.5f * h
@@ -909,7 +909,7 @@ public defn capsule2 (a:V3f, b:V3f, d:Float) -> Shape :
     val ba = b - a
     val h  = clamp(dot(pa, lit(ba)) / lit(dot(ba, ba)), lit(0.0), lit(1.0))
     len(pa - h * lit(ba)) - lit(r)
-  Shape(fab, fatten(Box(a, a) | Box(b, b), r))
+  Shape(fab, fatten(Boxf(a, a) | Boxf(b, b), r))
 
 public defn thicken (segments:Seqable<[V3f, V3f]>, f:(V3f, V3f, Float) -> Shape, d:Float) -> Shape :
   val caps = for [v0, v1] in segments seq : f(v0, v1, d)
@@ -935,15 +935,15 @@ public defn space (gdims:V3f, shape:Shape) :
   val fac    = min(gratio)
   mag1(fac, shape)
 
-public defn empty () : Shape(lit{pos-inf}, min-box())
-public defn full () : Shape(lit{neg-inf}, inf-box())
+public defn empty () : Shape(lit{pos-inf-f}, min-box-f())
+public defn full () : Shape(lit{neg-inf-f}, inf-box-f())
 
 ;; public defn space-x (gdim:Float, shape:Shape) : mag1(gdim / x(dims(bounds(shape))), shape)
 ;; public defn space-y (gdim:Float, shape:Shape) : mag1(gdim / y(dims(bounds(shape))), shape)
 ;; public defn space-z (gdim:Float, shape:Shape) : mag1(gdim / z(dims(bounds(shape))), shape)
 
 public defmulti spacer<?T> (g:?T&Poseable, dims:V3f) -> T
-defmethod spacer (g:Shape, gdims:V3f) : Shape(lit{pos-inf}, Box(dim-min(gdims), dim-max(gdims)))
+defmethod spacer (g:Shape, gdims:V3f) : Shape(lit{pos-inf-f}, Boxf(dim-min(gdims), dim-max(gdims)))
 defmethod spacer (g:Assembly, dims:V3f) : Assembly(BLACK, [ spacer(empty(), dims) ])
 
 public defn spacer-x<?T> (gdim:Float, g:?T&Poseable) : spacer(g, V3f(gdim, 0.0f, 0.0f))
@@ -954,7 +954,7 @@ public defn spacer-x (gdim:Float) : spacer-x(gdim, empty())
 public defn spacer-y (gdim:Float) : spacer-y(gdim, empty())
 public defn spacer-z (gdim:Float) : spacer-z(gdim, empty())
 
-public defn stack-idx-using<?T> (ishapes:Seqable<?T&Poseable>, iboundz:Seqable<Box>, idx:Int, dir:Float) -> Seq<T> :
+public defn stack-idx-using<?T> (ishapes:Seqable<?T&Poseable>, iboundz:Seqable<Boxf>, idx:Int, dir:Float) -> Seq<T> :
   val [shapes, boundz] = [to-tuple(ishapes), to-tuple(iboundz)]
   val tot = reduce(plus, for bounds in boundz seq : dims(bounds)[idx])
   var tot-fac = 0.0f
@@ -994,8 +994,8 @@ public defn glue-amount<?T> (shape:?T&Poseable) -> Float :
 
 public defn Glue (amount:Float) :
   new Glue :
-    defmethod fabber (this): fn (p:Vec3Field) : lit(pos-inf)
-    defmethod bounds (this): Box(V3f(0.0f, 0.0f, 0.0f), V3f(0.0f, 0.0f, 0.0f))
+    defmethod fabber (this): fn (p:Vec3Field) : lit(pos-inf-f)
+    defmethod bounds (this): Boxf(V3f(0.0f, 0.0f, 0.0f), V3f(0.0f, 0.0f, 0.0f))
     defmethod amount (this): amount
 
 public deftype AssemblyGlue <: AnyGlue & Assembly
@@ -1090,7 +1090,7 @@ public defn space-x (sep:Float) : space-idx(sep, 0)
 public defn space-y (sep:Float) : space-idx(sep, 1)
 public defn space-z (sep:Float) : space-idx(sep, 2)
 
-defn align-it<?T> (ishapes:Seqable<?T&Poseable>, value:(Box) -> Float, mov:(Float, T) -> T) -> Seq<T> :
+defn align-it<?T> (ishapes:Seqable<?T&Poseable>, value:(Boxf) -> Float, mov:(Float, T) -> T) -> Seq<T> :
   val shapes = to-tuple(ishapes)
   val target = reduce(union, seq(bounds, shapes))
   ;; val target = bounds(shapes[0])
@@ -1142,7 +1142,7 @@ public var *render-offset* = 16.0f
 public defn slice (z:Float, s:Shape) -> Polygon :
   val bt = jit(s) as BoundedTree
   val eps = *render-offset* ;; 1.0f / *resolution*
-  val bds = Box(xy(lo(bounds(s)) + V3f((- eps), (- eps), z)), xy(hi(bounds(s)) + V3f(eps, eps, z)))
+  val bds = Boxf(xy(lo(bounds(s)) + V3f((- eps), (- eps), z)), xy(hi(bounds(s)) + V3f(eps, eps, z)))
   val start = current-time-ms()
   val poly = tree-render-slice(tree(bt), bds, *resolution*)
   ;; println-all(["RENDER-SLICE = " to-float(current-time-ms() - start) * 0.001f])
@@ -1153,7 +1153,7 @@ public defn pixels (z:Float, s:Shape) -> Pixels :
   val bt = jit(s) as BoundedTree
   ;; val eps = *render-offset* ;; 1.0f / *resolution*
   val eps = 1.0f / *resolution*
-  val bds = Box(xy(lo(bounds(s)) + V3f((- eps), (- eps), z)), xy(hi(bounds(s)) + V3f(eps, eps, z)))
+  val bds = Boxf(xy(lo(bounds(s)) + V3f((- eps), (- eps), z)), xy(hi(bounds(s)) + V3f(eps, eps, z)))
   val start = current-time-ms()
   val pixels = tree-render-pixels(tree(bt), bds, *resolution*)
   ;; println-all(["RENDER-PIXELS = " to-float(current-time-ms() - start) * 0.001f])
