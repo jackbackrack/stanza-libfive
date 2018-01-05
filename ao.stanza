@@ -5,7 +5,7 @@ defpackage ao :
   import utils
   import glu
   import geom
-  import font
+  import shape
 
 lostanza deftype ao_interval :
   lower : float
@@ -161,67 +161,50 @@ defmethod equal? (a:FloFieldOp, b:FloFieldOp) -> True|False :
 defmethod count (f:FloFieldOp) -> Int :
   1 + reduce(plus, 0, seq(count, args(f)))
 
-public deftype Poseable <: Geom
-public defmulti bounds (p:Poseable) -> Boxf
-public defmulti color (p:Poseable) -> V4f
-public defmulti tags (p:Poseable) -> Tuple<Symbol>
-public defmulti name (p:Poseable) -> False|Symbol
-public defmulti set-name<?T> (p:?T&Poseable, name:Symbol) -> T
-public defmulti points (p:Poseable) -> Tuple<V3f>
-public defmulti xyz<?T> (mat:Mat44, p:?T&Poseable) -> T
-public defmulti rgb<?T> (c:V4f, p:?T&Poseable) -> T
-public defmulti shapes (p:Poseable) -> Seqable<Shape>
+public defmulti mesh (s:Shape) -> False|Mesh
+public defmulti cache (s:Shape) -> HashTable<Vec3Field,FloField>
+public defmulti fabber (s:Shape) -> ((Vec3Field) -> FloField)
+public defmulti set-mesh (s:Shape, m:Mesh) -> False
 
-public defn mov-x<?T> (dx:Float, p:?T&Poseable) -> T : mov(V3f(dx, 0.0f, 0.0f), p)
-public defn mov-y<?T> (dy:Float, p:?T&Poseable) -> T : mov(V3f(0.0f, dy, 0.0f), p)
-public defn mov-z<?T> (dz:Float, p:?T&Poseable) -> T : mov(V3f(0.0f, 0.0f, dz), p)
-public defn mov (d:V3f)     : mov{d, _}
-public defn mov-x (d:Float) : mov-x{d, _}
-public defn mov-y (d:Float) : mov-y{d, _}
-public defn mov-z (d:Float) : mov-z{d, _}
-
-public defn shapes (s:Seqable<Shape>) : s
-
-public defn rgb (c:V4f) : rgb{c, _}
-
-;;; ASSEMBLIES
-
-public deftype Assembly <: Poseable
-public defmulti children (a:Assembly) -> Seqable<Poseable>
-public defmulti mat (l:Assembly) -> Mat44
-
-public defn Assembly (mat:Mat44, name:False|Symbol, color:V4f, poseables:Seqable<Poseable>) -> Assembly :
-  val children = to-tuple $ poseables
-  new Assembly :
-    defmethod children (this) : children
+public defn Shape (fabber:(Vec3Field) -> FloField, bounds:Box3f, name:False|Symbol, tags:Tuple<Symbol>, points:Tuple<V3f>) :
+  val cache = HashTable<Vec3Field,FloField>()
+  var mesh:False|Mesh = false
+  new Shape :
+    defmethod fabber (this) : fabber
+    defmethod bounds (this) : bounds
+    defmethod points (this) : points
+    defmethod cache (this) : cache
     defmethod name (this) : name
-    defmethod tags (this) : to-tuple $ unique $ cat-all $ seq(tags, children)
-    defmethod bounds (this) : mat * reduce(bit-or, seq(bounds, children))
-    defmethod mat (this) : mat
-    defmethod color (this) : color
-    defmethod shapes (this) : seq(rgb{color, _}, seq(xyz{mat, _}, cat-all $ seq(shapes, children)))
-    defmethod points (this) : to-tuple $ cat-all $ seq(points, children)
+    defmethod tags (this) : tags
+    defmethod shapes (this) : [ this ]
+    defmethod mesh (this) : mesh
+    defmethod set-mesh (this, m:Mesh) : mesh = m
 
-public defn Assembly (mat:Mat44, poseables:Seqable<Poseable>) -> Assembly :
-  Assembly(mat, false, V4f(0.0f, 0.0f, 0.0f, 0.0f), poseables)
-  
-public defn Assembly (poseables:Seqable<Poseable>) -> Assembly :
-  Assembly(id-mat44(), poseables)
-  
-public defn Assembly (color:V4f, poseables:Seqable<Poseable>) -> Assembly :
-  Assembly(id-mat44(), false, color, poseables)
+public defn Shape (fabber:(Vec3Field) -> FloField, bounds:Box3f) :
+  Shape(fabber, bounds, false, [], [])
 
-defmethod print (s:OutputStream, a:Assembly) :
-  print(s, "Assembly(%_ %,)" % [name(a), children(a)])
+public defmethod clone (s:Shape, name:Symbol, points:Tuple<V3f>, tags:Tuple<Symbol>) -> Shape :
+  Shape(fabber(s), bounds(s), name, tags, points)
 
-public defmethod xyz (xf:Mat44, a:Assembly) -> Assembly :
-  Assembly(mat(a) * xf, name(a), color(a), children(a))
+public defn Shape (s:Shape, bounds:Box3f, name:False|Symbol, tags:Tuple<Symbol>, points:Tuple<V3f>) :
+  Shape(fabber(s), bounds, name, tags, points)
 
-public defmethod rgb (c:V4f, a:Assembly) -> Assembly :
-  Assembly(mat(a), name(a), c, children(a))
+public defn Shape (s:Shape, bounds:Box3f) :
+  Shape(s, bounds, name(s), tags(s), points(s))
 
-public defmethod set-name (a:Assembly, name:Symbol) -> Assembly :
-  Assembly(mat(a), name, color(a), children(a))
+defn fab (s:Shape, p:Vec3Field) -> FloField :
+  fabber(s)(p)
+  ;; if key?(cache(s), p) :
+  ;;   cache(s)[p]
+  ;; else :
+  ;;   val f = fabber(s)(p)
+  ;;   cache(s)[p] = f
+  ;;   ;; if length(cache(s)) > 1 :
+  ;;   ;;   println-all(["MISS " to-tuple $ keys(cache(s))])
+  ;;   f
+
+defmethod print (s:OutputStream, o:Shape) :
+  print-all(s, ["Shape(" bounds(o) ")"])
 
 public deftype AnyTree <: Geom
 
@@ -237,76 +220,10 @@ public defn set-mesh (t:BoundedTree, m:Mesh) : set-mesh(shape(t), m)
 
 public defstruct TreeAssembly <: AnyTree :
   name  : False|Symbol
-  mat   : Mat44
+  mat   : Mat44f
   color : V4f
   trees : Tuple<AnyTree>
 
-;;; SHAPE
-
-public deftype Shape <: Poseable
-public defmulti fabber (s:Shape) -> ((Vec3Field) -> FloField)
-public defmulti cache (s:Shape) -> HashTable<Vec3Field,FloField>
-public defmulti mesh (s:Shape) -> False|Mesh
-public defmulti set-mesh (s:Shape, m:Mesh) -> False
-
-public defn Shape (fabber:(Vec3Field) -> FloField, bounds:Boxf, name:False|Symbol, tags:Tuple<Symbol>, points:Tuple<V3f>) :
-  val cache = HashTable<Vec3Field,FloField>()
-  var mesh:False|Mesh = false
-  new Shape :
-    defmethod fabber (this) : fabber
-    defmethod bounds (this) : bounds
-    defmethod points (this) : points
-    defmethod cache (this) : cache
-    defmethod name (this) : name
-    defmethod tags (this) : tags
-    defmethod shapes (this) : [ this ]
-    defmethod mesh (this) : mesh
-    defmethod set-mesh (this, m:Mesh) : mesh = m
-
-public defn Shape (fabber:(Vec3Field) -> FloField, bounds:Boxf) :
-  Shape(fabber, bounds, false, [], [])
-
-public defn add-points (s:Shape, points:Tuple<V3f>) :
-  Shape(fabber(s), bounds(s), false, tags(s), points)
-
-public defn add-tags (s:Shape, tags:Tuple<Symbol>) :
-  Shape(fabber(s), bounds(s), name(s), tags, points(s))
-
-public defmethod set-name (s:Shape, name:Symbol) :
-  Shape(fabber(s), bounds(s), name, tags(s), points(s))
-
-public defn add-min-x-point (s:Shape) :
-  add-points(s, [V3f(x(lo(bounds(s))), 0.0f, 0.0f)])
-public defn add-max-x-point (s:Shape) :
-  add-points(s, [V3f(x(hi(bounds(s))), 0.0f, 0.0f)])
-public defn add-min-y-point (s:Shape) :
-  add-points(s, [V3f(0.0f, y(lo(bounds(s))), 0.0f)])
-public defn add-max-y-point (s:Shape) :
-  add-points(s, [V3f(0.0f, y(hi(bounds(s))), 0.0f)])
-public defn add-min-z-point (s:Shape) :
-  add-points(s, [V3f(0.0f, 0.0f, z(lo(bounds(s))))])
-public defn add-max-z-point (s:Shape) :
-  add-points(s, [V3f(0.0f, 0.0f, z(hi(bounds(s))))])
-
-defmethod print (s:OutputStream, o:Shape) :
-  print-all(s, ["Shape(" bounds(o) ")"])
-
-defn fab (s:Shape, p:Vec3Field) -> FloField :
-  fabber(s)(p)
-  ;; if key?(cache(s), p) :
-  ;;   cache(s)[p]
-  ;; else :
-  ;;   val f = fabber(s)(p)
-  ;;   cache(s)[p] = f
-  ;;   ;; if length(cache(s)) > 1 :
-  ;;   ;;   println-all(["MISS " to-tuple $ keys(cache(s))])
-  ;;   f
-
-public defn Shape (s:Shape, bounds:Boxf, name:False|Symbol, tags:Tuple<Symbol>, points:Tuple<V3f>) :
-  Shape(fabber(s), bounds, name, tags, points)
-
-public defn Shape (s:Shape, bounds:Boxf) :
-  Shape(s, bounds, name(s), tags(s), points(s))
 
 public lostanza defn tree-delete (t:ref<Tree>) -> ref<False> :
   call-c ao_tree_delete(t.value)
@@ -316,11 +233,11 @@ public lostanza defn tree-save (t:ref<Tree>, filename:ref<String>) -> ref<False>
   call-c ao_tree_save(t.value, addr!(filename.chars))
   return false
 
-public lostanza defn tree-save-mesh (t:ref<Tree>, filename:ref<String>, box:ref<Boxf>, res:ref<Float>) -> ref<False> :
+public lostanza defn tree-save-mesh (t:ref<Tree>, filename:ref<String>, box:ref<Box3f>, res:ref<Float>) -> ref<False> :
   call-c ao_tree_save_mesh_spread(t.value, x(lo(box)).value, x(hi(box)).value, y(lo(box)).value, y(hi(box)).value, z(lo(box)).value, z(hi(box)).value, res.value, addr!(filename.chars))
   return false
 
-public lostanza defn tree-save-slice (t:ref<Tree>, filename:ref<String>, box:ref<Boxf>, res:ref<Float>) -> ref<False> :
+public lostanza defn tree-save-slice (t:ref<Tree>, filename:ref<String>, box:ref<Box3f>, res:ref<Float>) -> ref<False> :
   call-c ao_tree_save_slice_spread(t.value, x(lo(box)).value, x(hi(box)).value, y(lo(box)).value, y(hi(box)).value, z(lo(box)).value, res.value, addr!(filename.chars))
   return false
 
@@ -348,7 +265,7 @@ defn to-mesh (rm:AoMesh) -> Mesh :
   ;;   println-all(["STZ VERT " i " " vert])
   Mesh(verts, tris)
 
-public lostanza defn tree-render-mesh (t:ref<Tree>, box:ref<Boxf>, res:ref<Float>) -> ref<Mesh> :
+public lostanza defn tree-render-mesh (t:ref<Tree>, box:ref<Box3f>, res:ref<Float>) -> ref<Mesh> :
   val out = call-c ao_tree_render_mesh_spread(t.value, x(lo(box)).value, x(hi(box)).value, y(lo(box)).value, y(hi(box)).value, z(lo(box)).value, z(hi(box)).value, res.value)
   val c-mesh = new AoMesh{out}
   val mesh = to-mesh(c-mesh)
@@ -368,14 +285,14 @@ defn to-pixels (p:AoPixels, res:Float) -> Pixels :
   copy-bytes(data, p, tot)
   Pixels(V3i(width, height, 1), 1.0f / res, data)
 
-public lostanza defn tree-render-pixels (t:ref<Tree>, box:ref<Boxf>, res:ref<Float>) -> ref<Pixels> :
+public lostanza defn tree-render-pixels (t:ref<Tree>, box:ref<Box3f>, res:ref<Float>) -> ref<Pixels> :
   val out = call-c ao_tree_render_pixels_spread(t.value, x(lo(box)).value, x(hi(box)).value, y(lo(box)).value, y(hi(box)).value,  z(lo(box)).value, res.value)
   val c-pixels = new AoPixels{out}
   val pixels = to-pixels(c-pixels, res)
   call-c ao_pixels_delete(out)
   return pixels
 
-lostanza defn get (contours:ref<AoContours>, c:ref<Int>, i:ref<Int>) -> ref<V3f> :
+lostanza defn get (contours:ref<AoContours>, c:ref<Int>, i:ref<Int>) -> ref<V2f> :
   val contour = contours.value.cs[c.value]
   val pt      = contour.pts[i.value]
   return V2f(new Float{pt.x}, new Float{pt.y})
@@ -394,7 +311,7 @@ defn to-polygon (cs:AoContours) -> Polygon :
       Contour(to-tuple $ points)
   Polygon(to-tuple $ contours)
 
-public lostanza defn tree-render-slice (t:ref<Tree>, box:ref<Boxf>, res:ref<Float>) -> ref<Polygon> :
+public lostanza defn tree-render-slice (t:ref<Tree>, box:ref<Box3f>, res:ref<Float>) -> ref<Polygon> :
   val out = call-c ao_tree_render_slice_spread(t.value, x(lo(box)).value, x(hi(box)).value, y(lo(box)).value, y(hi(box)).value, z(lo(box)).value, res.value)
   val slice = new AoContours{out}
   val poly = to-polygon(slice)
@@ -573,7 +490,7 @@ public defn times (s:FloField, v:Vec3Field) -> Vec3Field :
 public defn times (a:Vec3Field, b:Vec3Field) -> Vec3Field :
   Vec3Field(x(a) * x(b), y(a) * y(b), z(a) * z(b))
 
-public defn times (m:Mat44, v:Vec3Field) -> Vec3Field :
+public defn times (m:Mat44f, v:Vec3Field) -> Vec3Field :
   val px = x(v) * lit(m[0,0]) + y(v) * lit(m[1,0]) + z(v) * lit(m[2,0]) + lit(m[3,0])
   val py = x(v) * lit(m[0,1]) + y(v) * lit(m[1,1]) + z(v) * lit(m[2,1]) + lit(m[3,1])
   val pz = x(v) * lit(m[0,2]) + y(v) * lit(m[1,2]) + z(v) * lit(m[2,2]) + lit(m[3,2])
@@ -600,76 +517,33 @@ public defn modulo (a:Vec3Field, b:Vec3Field) -> Vec3Field :
             z(a) * x(b) - x(a) * z(b),
             x(a) * y(b) - y(a) * x(b))
 
-public defn with-xyz (mat:Mat44, f:(Vec3Field) -> Vec3Field, s:Shape) -> Shape :
+public defn with-xyz (mat:Mat44f, f:(Vec3Field) -> Vec3Field, s:Shape) -> Shape :
   Shape(fn (p): fab(s, f(p)), mat * bounds(s), name(s), tags(s), to-tuple $ seq({mat * _} points(s)))
 
-public defmethod xyz (mat:Mat44, s:Shape) -> Shape :
+public defmethod xyz (mat:Mat44f, s:Shape) -> Shape :
   with-xyz(mat, fn (p) : inverse(mat) * p, s)
 
+public defn xy (s:Shape) -> Shape : xy(0.0f, s)
+
 ;; TODO
-public defmethod rgb (c:V4f, s:Shape) -> Shape :
+defmethod rgb (c:V4f, s:Shape) -> Shape :
   s
 
-public defn mov<?T> (dp:V3f, s:?T&Poseable) -> T :
-  xyz(mov-mat44(dp), s)
+defmethod mov (dp:V3f, s:Shape) -> Shape :
+  xyz(mov-mat44f(dp), s)
+
+defmethod mov (dp:V3f, s:Assembly) -> Assembly :
+  xyz(mov-mat44f(dp), s)
 
 ;; public defn mov (dx:FloField, dy:FloField, f:Shape) -> FloField :
 ;;   mov(dx, dy, lit(0.0), f)
 
-public defn degrees-to-radians (d:Float) -> Float :
-  d * to-float(PI-F) / 180.0f
-
-public defn radians-to-degrees (a:Float) -> Float :
-  a * 180.0f / to-float(PI-F)
-
-public defn rot-x<?T> (d:Float, s:?T&Poseable) -> T :
-  xyz(rot-mat44(V3f(degrees-to-radians(d), 0.0f, 0.0f)), s)
-
-public defn rot-y<?T> (d:Float, s:?T&Poseable) -> T :
-  xyz(rot-mat44(V3f(0.0f, degrees-to-radians(d), 0.0f)), s)
-
-public defn rot-z<?T> (d:Float, s:?T&Poseable) -> T :
-  xyz(rot-mat44(V3f(0.0f, 0.0f, degrees-to-radians(d))), s)
-
-public defn rot-x (d:Float) : rot-x{d, _}
-public defn rot-y (d:Float) : rot-y{d, _}
-public defn rot-z (d:Float) : rot-z{d, _}
-
-public defn reflect-x<?T> (s:?T&Poseable) -> T : xyz(mag-mat44(V3f(-1.0f, 1.0f, 1.0f)), s)
-
-public defn reflect-y<?T> (s:?T&Poseable) -> T : xyz(mag-mat44(V3f( 1.0f,-1.0f, 1.0f)), s)
-
-public defn reflect-z<?T> (s:?T&Poseable) -> T : xyz(mag-mat44(V3f( 1.0f, 1.0f,-1.0f)), s)
-
-public defn reflect-xy<?T> (s:?T&Poseable) -> T : xyz(reflect-xy-mat44(), s)
-
-public defn reflect-xz<?T> (s:?T&Poseable) -> T : xyz(reflect-xz-mat44(), s)
-
-public defn reflect-yz<?T> (s:?T&Poseable) -> T : xyz(reflect-yz-mat44(), s)
-
-public defn mag<?T> (fac:Float, s:?T&Poseable) -> T : xyz(mag-mat44(fac), s)
-
-public defn mag1<?T> (sa:Float, s:?T&Poseable) -> T : xyz(mag-mat44(sa), s)
-
-public defn mag<?T> (fac:V3f, s:?T&Poseable) -> T : xyz(mag-mat44(fac), s)
-
-public defn mag-x<?T> (sx:Float, s:?T&Poseable) -> T : xyz(mag-mat44(V3f(sx, 1.0f, 1.0f)), s)
-
-public defn mag-y<?T> (sy:Float, s:?T&Poseable) -> T : xyz(mag-mat44(V3f(1.0f, sy, 1.0f)), s)
-
-public defn mag-z<?T> (sz:Float, s:?T&Poseable) -> T : xyz(mag-mat44(V3f(1.0f, 1.0f, sz)), s)
-
-public defn mag   (s:V3f)    : mag{s, _}
-public defn mag1  (s:Float)  : mag-x{s, _}
-public defn mag-x (sx:Float) : mag-x{sx, _}
-public defn mag-y (sy:Float) : mag-y{sy, _}
-public defn mag-z (sz:Float) : mag-z{sz, _}
 
 defn shear-x-y (ymin:Float, ymax:Float, dx0:Float, dx1:Float, s:Shape) -> Shape :
   defn xf (p) :
     val f = (y(p) - lit(ymin)) / (lit(ymax) - y(p))
     Vec3Field(x(p) - lit(dx0) * (lit(1.0) - f) - lit(dx1) * f, y(p), z(p))  
-  with-xyz(shear-x-y-mat44(ymin, ymax, dx0, dx1), xf, s)
+  with-xyz(shear-x-y-mat44f(ymin, ymax, dx0, dx1), xf, s)
 
 public defn shear-x-y (h:Float, dx0:Float, dx1:Float, s:Shape) -> Shape :
   shear-x-y(dim-min(h), dim-max(h), dx0, dx1, s)
@@ -679,87 +553,71 @@ defn taper-x-y (ymin:Float, ymax:Float, s0:Float, s1:Float, s:Shape) -> Shape :
   defn xf (p) :
     val sc = lit(ymax - ymin) / ((lit(s1) * (y(p) - lit(ymin))) - (lit(s0) * (y(p) - lit(ymax))))
     Vec3Field(x(p) * sc, y(p), z(p))
-  with-xyz(id-mat44(), xf, s)
+  with-xyz(id-mat44f(), xf, s)
 
 ;; TODO : UPDATE BOUNDS
 defn taper-xy-z (zmin:Float, zmax:Float, s0:Float, s1:Float, s:Shape) -> Shape :
   defn xf (p) :
     val sc = lit(zmax - zmin) / ((lit(s1) * (z(p) - lit(zmin))) - (lit(s0) * (z(p) - lit(zmax))))
     Vec3Field(x(p) * sc, y(p) * sc, z(p))
-  with-xyz(id-mat44(), xf, s)
+  with-xyz(id-mat44f(), xf, s)
 
 public defn taper-xy-z (h:Float, s0:Float, s1:Float, s:Shape) -> Shape :
   taper-xy-z(dim-min(h), dim-max(h), s0, s1, s)
 
 ;; TODO : UPDATE BOUNDS
 public defn revolve-y (s:Shape) -> Shape :
-  with-xyz(id-mat44(), fn (p): Vec3Field(sqrt(sqr(x(p)) + sqr(z(p))), y(p), z(p)), s)
+  with-xyz(id-mat44f(), fn (p): Vec3Field(sqrt(sqr(x(p)) + sqr(z(p))), y(p), z(p)), s)
 
 public defn unrevolve-y (s:Shape) -> Shape :
-  with-xyz(mag-mat44(V3f(2.0f * PI-F, 1.0f, 1.0f)), fn (p): Vec3Field(z(p) * cos(x(p)), y(p), z(p) * sin(x(p))), s)
-  ;; with-xyz(mag-mat44(V3f(2.0f * PI-F, 1.0f, 1.0f)), fn (p): Vec3Field(atan2(x(p), z(p)), y(p), sqrt(sqr(x(p)) + sqr(z(p)))), s)
+  with-xyz(mag-mat44f(V3f(2.0f * PI-F, 1.0f, 1.0f)), fn (p): Vec3Field(z(p) * cos(x(p)), y(p), z(p) * sin(x(p))), s)
+  ;; with-xyz(mag-mat44f(V3f(2.0f * PI-F, 1.0f, 1.0f)), fn (p): Vec3Field(atan2(x(p), z(p)), y(p), sqrt(sqr(x(p)) + sqr(z(p)))), s)
 
 ;; TODO : UPDATE BOUNDS
 public defn revolve-x (s:Shape) -> Shape :
-  with-xyz(id-mat44(), fn (p): Vec3Field(x(p), sqrt(sqr(y(p)) + sqr(z(p))), z(p)), s)
+  with-xyz(id-mat44f(), fn (p): Vec3Field(x(p), sqrt(sqr(y(p)) + sqr(z(p))), z(p)), s)
 
 public defn unrevolve-x (s:Shape) -> Shape :
-  with-xyz(mag-mat44(V3f(1.0f, 2.0f * PI-F, 1.0f)), fn (p): Vec3Field(x(p), z(p) * cos(y(p)), z(p) * sin(y(p))), s)
-  ;; with-xyz(mag-mat44(V3f(2.0f * PI-F, 1.0f, 1.0f)), fn (p): Vec3Field(x(p), atan2(y(p), z(p)), sqrt(sqr(y(p)) + sqr(z(p)))), s)
+  with-xyz(mag-mat44f(V3f(1.0f, 2.0f * PI-F, 1.0f)), fn (p): Vec3Field(x(p), z(p) * cos(y(p)), z(p) * sin(y(p))), s)
+  ;; with-xyz(mag-mat44f(V3f(2.0f * PI-F, 1.0f, 1.0f)), fn (p): Vec3Field(x(p), atan2(y(p), z(p)), sqrt(sqr(y(p)) + sqr(z(p)))), s)
 
 ;; TODO : UPDATE BOUNDS
 public defn xy (z:Float, s:Shape) -> Shape :
-  with-xyz(id-mat44(), fn (p): Vec3Field(x(p), y(p), lit(z)), s)
-
-public defn xy (s:Shape) -> Shape : xy(0.0f, s)
+  with-xyz(id-mat44f(), fn (p): Vec3Field(x(p), y(p), lit(z)), s)
 
 public defn circle (d:Float) -> Shape :
   val r = d * 0.5f
-  Shape(fn (p): len(xy(p)) - lit(r), Boxf(V3f((- r), (- r), neg-inf-f), V3f(r, r, pos-inf-f)))
+  Shape(fn (p): len(xy(p)) - lit(r), Box3f(V3f((- r), (- r), neg-inf-f), V3f(r, r, pos-inf-f)))
 
 ;; public defn circle (x:FloField, y:FloField, r:FloField) -> FloField :
 ;;   mov(x, y, {circle(r)})
 
 public defn sphere (d:Float) -> Shape :
   val r = d * 0.5f
-  Shape(fn (p): len(p) - lit(r), Boxf(V3f((- r), (- r), (- r)), V3f(r, r, r)))
+  Shape(fn (p): len(p) - lit(r), Box3f(V3f((- r), (- r), (- r)), V3f(r, r, r)))
 
 ;; public defn sphere (x:FloField, y:FloField, z:FloField, r:FloField) -> FloField :
 ;;   mov(x, y, z, {circle(r)})
 
-defn name (a:Shape, b:Shape) :
-  name(a) when name(a) is Symbol else name(b)
+public defn extrude (h:Float, shape:Shape) -> Shape :
+  extrude(dim-min(h), dim-max(h), shape)
 
-defn tags (a:Shape, b:Shape) :
-  to-tuple $ unique $ cat(tags(a), tags(b))
-
-defn points (a:Shape, b:Shape) :
-  to-tuple $ unique $ cat(points(a), points(b))
+public defn extrude (h:Float) : extrude{h, _}
 
 public defn bit-or (a:Shape, b:Shape) -> Shape :
   Shape(fn (p): min(fab(a, p), fab(b, p)), bounds(a) | bounds(b), name(a, b), tags(a, b), points(a, b))
 
-public defn union (args:Seqable<Poseable>) -> Shape :
-  reduce(bit-or, empty(), cat-all(seq(shapes, args)))
+public defn intersection (args:Seqable<Shape>) -> Shape :
+  reduce(bit-and, args)
 
 public defn bit-and (a:Shape, b:Shape) -> Shape :
   Shape(fn (p): max(fab(a, p), fab(b, p)), bounds(a) & bounds(b), name(a, b), tags(a, b), points(a, b))
 
-public defn intersection (args:Seqable<Shape>) -> Shape :
-  reduce(bit-and, args)
-
 public defn invert (s:Shape) -> Shape :
-  Shape(fn (p): (- fab(s, p)), inf-box-f())
+  Shape(fn (p): (- fab(s, p)), pos-inf-box3f())
 
 public defn rem (a:Shape, b:Shape) -> Shape :
   Shape(a & invert(b), bounds(a), name(a, b), tags(a, b), points(a, b))
-
-public defn rem (a:Shape, args:Seqable<Shape>) -> Shape :
-  rem(a, union(args))
-
-public defn rem (shapes:Seqable<Shape>) -> Shape :
-  val s = to-seq(shapes)
-  rem(next(s), s)
 
 public defn offset (s:Shape, o:Float) -> Shape :
   Shape(fn (p): fab(s, p) - lit(o), fatten(bounds(s), o), name(s), tags(s), points(s))
@@ -779,51 +637,34 @@ public defn morph (a:Shape, b:Shape, m:Float) -> Shape :
   Shape(fn (p): fab(a, p) * (lit(1.0) - lit(m)) + fab(b, p) * lit(m), bounds(a) | bounds(b))
   
 defn rect (xmin:Float, ymin:Float, xmax:Float, ymax:Float) -> Shape :
-  val b = Boxf(V3f(xmin, ymin, neg-inf-f), V3f(xmax, ymax, pos-inf-f))
+  val b = Box3f(V3f(xmin, ymin, neg-inf-f), V3f(xmax, ymax, pos-inf-f))
   Shape(fn (p): max(max(lit(xmin) - x(p), x(p) - lit(xmax)), max(lit(ymin) - y(p), y(p) - lit(ymax))),
-        Boxf(V3f(xmin, ymin, neg-inf-f), V3f(xmax, ymax, pos-inf-f)))
-
-public defn dim-min (d:Float) -> Float : d * -0.5f
-public defn dim-max (d:Float) -> Float : d *  0.5f
-
-public defn dim-min (dim:V3f) -> V3f : V3f(dim-min(x(dim)), dim-min(y(dim)), dim-min(z(dim)))
-public defn dim-max (dim:V3f) -> V3f : V3f(dim-max(x(dim)), dim-max(y(dim)), dim-max(z(dim)))
-
-public defn rect (w:Float, h:Float) -> Shape :
-  rect(dim-min(w), dim-min(h), dim-max(w), dim-max(h))
-
-public defn rect (v0:V3f, v1:V3f, d:Float) -> Shape :
-  val v = v1 - v0
-  val a = atan2(y(v),x(v))
-  mov(0.5f * (v0 + v1), rot-z(radians-to-degrees(a), rect(magnitude(v) + d, d)))
-
-public defn square (d:Float) -> Shape :
-  rect(d, d)
+        Box3f(V3f(xmin, ymin, neg-inf-f), V3f(xmax, ymax, pos-inf-f)))
 
 public defn edge (v0:V3f, v1:V3f) -> Shape :
   Shape(fn (p): lit(y(v1) - y(v0)) * (x(p) - lit(x(v0))) - lit(x(v1) - x(v0)) * (y(p) - lit(y(v0))),
-        Boxf(v0) | Boxf(v1))
+        Box3f(v0) | Box3f(v1))
 
 public defn convex (pts:Tuple<V3f>) -> Shape :
   val edges = for i in 0 to length(pts) seq :
                 edge(pts[i], pts[(i + 1) % length(pts)])
   val shape = reduce(fn (a:Shape, b:Shape): a & b, edges)
-  Shape(fabber(shape), reduce(bit-or, seq(Boxf, pts)))
+  Shape(fabber(shape), reduce(bit-or, seq(Box3f, pts)))
 
 public defn trim (v0:V3f, v1:V3f, s:Shape) -> Shape :
   val res = s & edge(v0, v1)
   Shape(fabber(res), bounds(s))
 
 public defn abs-x (s:Shape) -> Shape :
-  val res = s & edge(V2f(0.0f, neg-inf-f), V2f(0.0f, pos-inf-f))
-  val new-bounds = Boxf(set-elt(lo(bounds(s)), 0, max(lo(bounds(s))[0], 0.0f)),
-                       set-elt(hi(bounds(s)), 0, max(hi(bounds(s))[0], 0.0f)))
+  val res = s & edge(V3f(0.0f, neg-inf-f), V3f(0.0f, pos-inf-f))
+  val new-bounds = Box3f(set-elt(lo(bounds(s)), 0, max(lo(bounds(s))[0], 0.0f)),
+                         set-elt(hi(bounds(s)), 0, max(hi(bounds(s))[0], 0.0f)))
   Shape(fabber(res), new-bounds)
 
 public defn abs-y (s:Shape) -> Shape :
-  val res = s & edge(V2f(neg-inf-f, 0.0f), V2f(pos-inf-f, 0.0f))
-  val new-bounds = Boxf(set-elt(lo(bounds(s)), 1, max(lo(bounds(s))[1], 0.0f)),
-                       set-elt(hi(bounds(s)), 1, max(hi(bounds(s))[1], 0.0f)))
+  val res = s & edge(V3f(neg-inf-f, 0.0f), V3f(pos-inf-f, 0.0f))
+  val new-bounds = Box3f(set-elt(lo(bounds(s)), 1, max(lo(bounds(s))[1], 0.0f)),
+                        set-elt(hi(bounds(s)), 1, max(hi(bounds(s))[1], 0.0f)))
   Shape(fabber(res), new-bounds)
 
 public defn to-field2 (m:Mesh) -> Shape :
@@ -837,15 +678,40 @@ public defn to-field2 (p:Polygon) -> Shape :
 public defn triangle (a:V3f, b:V3f, c:V3f) -> Shape :
   convex([a, b, c])
 
+public defn union (args:Seqable<Shape>) -> Shape :
+  ;; reduce(bit-or, empty(), cat-all(seq(shapes, args)))
+  reduce(bit-or, empty(), args)
+
+public defn rem (a:Shape, args:Seqable<Shape>) -> Shape :
+  rem(a, union(args))
+
+public defn rem (shapes:Seqable<Shape>) -> Shape :
+  val s = to-seq(shapes)
+  rem(next(s), s)
+
+public defn thicken (segments:Seqable<[V3f, V3f]>, f:(V3f, V3f, Float) -> Shape, d:Float) -> Shape :
+  val caps = for [v0, v1] in segments seq : f(v0, v1, d)
+  reduce(fn (a:Shape, b:Shape): a | b, caps)
+
+public defn thicken (segments:Seqable<[V2f, V2f]>, f:(V2f, V2f, Float) -> Shape, d:Float) -> Shape :
+  val caps = for [v0, v1] in segments seq : f(v0, v1, d)
+  reduce(fn (a:Shape, b:Shape): a | b, caps)
+
 defn extrude (zmin:Float, zmax:Float, shape:Shape) -> Shape :
   val b = bounds(shape)
   Shape(fn (p): max(fab(shape, p), max(lit(zmin) - z(p), z(p) - lit(zmax))),
-        Boxf(V3f(x(lo(b)), y(lo(b)), zmin), V3f(x(hi(b)), y(hi(b)), zmax)))
+        Box3f(V3f(x(lo(b)), y(lo(b)), zmin), V3f(x(hi(b)), y(hi(b)), zmax)))
 
-public defn extrude (h:Float, shape:Shape) -> Shape :
-  extrude(dim-min(h), dim-max(h), shape)
+public defn rect (w:Float, h:Float) -> Shape :
+  rect(dim-min(w), dim-min(h), dim-max(w), dim-max(h))
 
-public defn extrude (h:Float) : extrude{h, _}
+public defn rect (v0:V3f, v1:V3f, d:Float) -> Shape :
+  val v = v1 - v0
+  val a = atan2(y(v),x(v))
+  mov(0.5f * (v0 + v1), rot-z(radians-to-degrees(a), rect(magnitude(v) + d, d)))
+
+public defn square (d:Float) -> Shape :
+  rect(d, d)
 
 ;;; DEPRECATE
 defn cube (xmin:Float, ymin:Float, zmin:Float, xmax:Float, ymax:Float, zmax:Float) -> Shape :
@@ -870,8 +736,11 @@ public defn cube (v:V3f) -> Shape :
 ;;     min(max(x(d),max(y(d),z(d))),lit(0.0)) + len(max(d,lit(0.0)))  
 ;;   Shape(fab, dims-to-box(dims))
 
-public defn box (b:Boxf) -> Shape :
+public defn box (b:Box3f) -> Shape :
   cube(x(lo(b)), y(lo(b)), z(lo(b)), x(hi(b)), y(hi(b)), z(hi(b)))
+
+public defn cylinder (d:Float, h:Float) -> Shape :
+  extrude(h, circle(d))
 
 ;; TODO: BROKEN
 public defn box (dims:V3f) -> Shape :
@@ -882,9 +751,6 @@ public defn box (dims:V3f) -> Shape :
 public defn round-box (dims:V3f, r:Float) -> Shape :
   offset(box(dims), r)
 
-public defn cylinder (d:Float, h:Float) -> Shape :
-  extrude(h, circle(d))
-
 public defn capsule (a:V3f, b:V3f, d:Float) -> Shape :
   val r  = 0.5f * d
   defn fab (p) :
@@ -892,7 +758,7 @@ public defn capsule (a:V3f, b:V3f, d:Float) -> Shape :
     val ba = b - a
     val h  = clamp(dot(pa, lit(ba)) / lit(dot(ba, ba)), lit(0.0), lit(1.0))
     len(pa - h * lit(ba)) - lit(r)
-  Shape(fab, fatten(Boxf(a, a) | Boxf(b, b), r))
+  Shape(fab, fatten(Box3f(a, a) | Box3f(b, b), r))
 
 public defn capsule (d:Float, h:Float) -> Shape :
   val r = 0.5f * h
@@ -909,13 +775,12 @@ public defn capsule2 (a:V3f, b:V3f, d:Float) -> Shape :
     val ba = b - a
     val h  = clamp(dot(pa, lit(ba)) / lit(dot(ba, ba)), lit(0.0), lit(1.0))
     len(pa - h * lit(ba)) - lit(r)
-  Shape(fab, fatten(Boxf(a, a) | Boxf(b, b), r))
+  Shape(fab, fatten(Box3f(a, a) | Box3f(b, b), r))
 
-public defn thicken (segments:Seqable<[V3f, V3f]>, f:(V3f, V3f, Float) -> Shape, d:Float) -> Shape :
-  val caps = for [v0, v1] in segments seq : f(v0, v1, d)
-  reduce(fn (a:Shape, b:Shape): a | b, caps)
+public defn thicken (g:PolyLine2f|Contour|Polygon, f:(V2f, V2f, Float) -> Shape, d:Float) -> Shape :
+  thicken(segments(g), f, d)
 
-public defn thicken (g:PolyLine|Contour|Polygon, f:(V3f, V3f, Float) -> Shape, d:Float) -> Shape :
+public defn thicken (g:PolyLine3f, f:(V3f, V3f, Float) -> Shape, d:Float) -> Shape :
   thicken(segments(g), f, d)
 
 public defn cone (d:Float, h:Float) -> Shape :
@@ -929,197 +794,6 @@ public defn pyramid (d:Float, h:Float) -> Shape :
 public defn torus (D:Float, d:Float) -> Shape :
   Shape(fn (p): len(Vec2Field(lit(D * 0.5f) - len(xy(p)), z(p))) - lit(d * 0.5f),
         dims-to-box(V3f(D + d, D + d, d)))
-
-public defn space (gdims:V3f, shape:Shape) :
-  val gratio = gdims / dims(bounds(shape))
-  val fac    = min(gratio)
-  mag1(fac, shape)
-
-public defn empty () : Shape(lit{pos-inf-f}, min-box-f())
-public defn full () : Shape(lit{neg-inf-f}, inf-box-f())
-
-;; public defn space-x (gdim:Float, shape:Shape) : mag1(gdim / x(dims(bounds(shape))), shape)
-;; public defn space-y (gdim:Float, shape:Shape) : mag1(gdim / y(dims(bounds(shape))), shape)
-;; public defn space-z (gdim:Float, shape:Shape) : mag1(gdim / z(dims(bounds(shape))), shape)
-
-public defmulti spacer<?T> (g:?T&Poseable, dims:V3f) -> T
-defmethod spacer (g:Shape, gdims:V3f) : Shape(lit{pos-inf-f}, Boxf(dim-min(gdims), dim-max(gdims)))
-defmethod spacer (g:Assembly, dims:V3f) : Assembly(BLACK, [ spacer(empty(), dims) ])
-
-public defn spacer-x<?T> (gdim:Float, g:?T&Poseable) : spacer(g, V3f(gdim, 0.0f, 0.0f))
-public defn spacer-y<?T> (gdim:Float, g:?T&Poseable) : spacer(g, V3f(0.0f, gdim, 0.0f))
-public defn spacer-z<?T> (gdim:Float, g:?T&Poseable) : spacer(g, V3f(0.0f, 0.0f, gdim))
-
-public defn spacer-x (gdim:Float) : spacer-x(gdim, empty())
-public defn spacer-y (gdim:Float) : spacer-y(gdim, empty())
-public defn spacer-z (gdim:Float) : spacer-z(gdim, empty())
-
-public defn stack-idx-using<?T> (ishapes:Seqable<?T&Poseable>, iboundz:Seqable<Boxf>, idx:Int, dir:Float) -> Seq<T> :
-  val [shapes, boundz] = [to-tuple(ishapes), to-tuple(iboundz)]
-  val tot = reduce(plus, for bounds in boundz seq : dims(bounds)[idx])
-  var tot-fac = 0.0f
-  val res =
-    generate<T&Poseable> :
-      for (child in shapes, bounds in boundz) do :
-        val now-fac = dims(bounds)[idx] / tot
-        val ctr     = center(bounds)[idx]
-        val amount  = dir * (tot / 2.0f - (tot-fac + now-fac / 2.0f) * tot) - ctr
-        val del     = amount * V3f-unit(idx)
-        yield(mov(del, child))
-        tot-fac = tot-fac + now-fac
-  filter({ volume(dims(bounds(_))) > 0.0f }, res)
-
-public defn stack-idx<?T> (ishapes:Seqable<?T&Poseable>, idx:Int, dir:Float) -> Seq<T> :
-  val shapes = to-tuple $ ishapes
-  stack-idx-using(shapes, seq(bounds, shapes), idx, dir)
-
-public defn stack-x<?T> (shapes:Seqable<?T&Poseable>) -> Seq<T> :
-  stack-idx(shapes, 0,  1.0f)
-
-public defn stack-y<?T> (shapes:Seqable<?T&Poseable>) -> Seq<T> :
-  stack-idx(shapes, 1,  1.0f)
-
-public defn stack-z<?T> (shapes:Seqable<?T&Poseable>) -> Seq<T> :
-  stack-idx(shapes, 2,  1.0f)
-
-public deftype AnyGlue <: Poseable
-public defmulti amount (g:AnyGlue) -> Float
-
-public deftype Glue <: AnyGlue & Shape
-
-public defn glue-amount<?T> (shape:?T&Poseable) -> Float :
-  match(shape) :
-    (g:AnyGlue) : amount(g)
-    (s)         : 0.0f
-
-public defn Glue (amount:Float) :
-  new Glue :
-    defmethod fabber (this): fn (p:Vec3Field) : lit(pos-inf-f)
-    defmethod bounds (this): Boxf(V3f(0.0f, 0.0f, 0.0f), V3f(0.0f, 0.0f, 0.0f))
-    defmethod amount (this): amount
-
-public deftype AssemblyGlue <: AnyGlue & Assembly
-defmulti glue (g:AssemblyGlue) -> Glue
-
-public defn AssemblyGlue (glue:Glue) :
-  new AssemblyGlue :
-    defmethod glue (this) : glue
-    defmethod color (this): BLACK
-    defmethod bounds (this) : bounds(glue)
-    defmethod amount (this) : amount(glue)
-
-public defmulti glue-of<?T> (s:?T&Poseable, a:Float) -> T
-defmethod glue-of (s:Shape, a:Float) -> Shape : Glue(a)
-defmethod glue-of (s:Assembly, a:Float) -> Assembly : AssemblyGlue(Glue(a))
-
-public defn glue-when<?T> (first?:True|False, shapes:Seqable<?T&Poseable>) -> Seq<T> :
-  generate<T> :
-    for (shape in shapes, i in 0 to false) do :
-      if first? or i > 0:
-        yield(glue-of(shape, 1.0f))
-      yield(shape)
-
-public defn glue-even<?T> (shapes:Seqable<?T&Poseable>) -> Seq<T> :
-  glue-when(true, shapes)
-
-public defn glue-odd<?T> (shapes:Seqable<?T&Poseable>) -> Seq<T> :
-  glue-when(false, shapes)
-
-public defn glue<?T> (shapes:Seqable<?T&Poseable>) -> Seq<T> :
-  glue-odd(shapes)
-
-public defn assign-glue-idx<?T> (ishapes:Seqable<?T&Poseable>, target:Float, idx:Int) -> Seq<T> :
-  val shapes = to-tuple(ishapes)
-  val tot = reduce(plus, for shape in shapes seq : dims(bounds(shape))[idx])
-  val glue-tot = reduce(plus, for shape in shapes seq : glue-amount(shape))
-  val gap-tot = (target - tot)
-  for shape in shapes seq :
-    match(shape) :
-      (g:AnyGlue&T) :
-        val s = (amount(g) / glue-tot) * gap-tot * V3f-unit(idx)
-        spacer(shape, s)
-      (s)           : s
-
-;; public defn interleave<?T> (a:Seqable<?T&Poseable>, b:Seqable<?T&Poseable>) -> Seq<T> :
-;;   generate<T> :
-;;     val [sa, sb] = [to-seq(a), to-seq(b)]
-;;     let loop (a?:True|False = true) :
-;;       if not empty?(sa) and not empty?(sa):
-;;         yield(next(sa) when a? else next(sb))
-;;         loop(not a?)
-
-public defn stack-idx<?T> (d:Float, idx:Int, shapes:Seqable<?T&Poseable>) -> Seq<T> :
-  stack-idx(assign-glue-idx(shapes, d, idx), idx, 1.0f)
-
-public defn stack-x<?T> (w:Float, shapes:Seqable<?T&Poseable>) -> Seq<T> :
-  stack-x(assign-glue-idx(shapes, w, 0))
-public defn stack-y<?T> (h:Float, shapes:Seqable<?T&Poseable>) -> Seq<T> :
-  stack-y(assign-glue-idx(shapes, h, 1))
-public defn stack-z<?T> (d:Float, shapes:Seqable<?T&Poseable>) -> Seq<T> :
-  stack-z(assign-glue-idx(shapes, d, 2))
-public defn stack-x (w:Float) : stack-x{w, _}
-public defn stack-y (h:Float) : stack-y{h, _}
-public defn stack-z (d:Float) : stack-z{d, _}
-
-public defn space-idx<?T> (iseps:Seqable<Float>, idx:Int, ishapes:Seqable<?T&Poseable>) -> Seq<T> :
-  val shapes = to-tuple $ ishapes
-  val seps = to-tuple $ for (sep in iseps, i in 0 to (length(shapes) - 1)) seq : sep
-  val tot = reduce(plus, 0.0f, seps)
-  val start = -0.5f * tot
-  val offs = generate<Float> :
-    let loop (off = start, i = 0) :
-      yield(off)
-      if i < length(seps) : loop(off + seps[i], i + 1)
-  for (shape in shapes, off in offs) seq :
-    mov(off * V3f-unit(idx), shape)
-
-public defn space-x<?T> (seps:Seqable<Float>, shapes:Seqable<?T&Poseable>) : space-idx(seps, 0, shapes)
-public defn space-y<?T> (seps:Seqable<Float>, shapes:Seqable<?T&Poseable>) : space-idx(seps, 1, shapes)
-public defn space-z<?T> (seps:Seqable<Float>, shapes:Seqable<?T&Poseable>) : space-idx(seps, 2, shapes)
-
-public defn space-idx<?T> (sep:Float, idx:Int, shapes:Seqable<?T&Poseable>) -> Seq<T> :
-  space-idx(repeatedly({ sep }), idx, shapes)
-
-public defn space-x<?T> (sep:Float, shapes:Seqable<?T&Poseable>) : space-idx(sep, 0, shapes)
-public defn space-y<?T> (sep:Float, shapes:Seqable<?T&Poseable>) : space-idx(sep, 1, shapes)
-public defn space-z<?T> (sep:Float, shapes:Seqable<?T&Poseable>) : space-idx(sep, 2, shapes)
-
-public defn space-idx (sep:Float, idx:Int) : space-idx{repeatedly({ sep }), idx, _}
-
-public defn space-x (sep:Float) : space-idx(sep, 0)
-public defn space-y (sep:Float) : space-idx(sep, 1)
-public defn space-z (sep:Float) : space-idx(sep, 2)
-
-defn align-it<?T> (ishapes:Seqable<?T&Poseable>, value:(Boxf) -> Float, mov:(Float, T) -> T) -> Seq<T> :
-  val shapes = to-tuple(ishapes)
-  val target = reduce(union, seq(bounds, shapes))
-  ;; val target = bounds(shapes[0])
-  for (child in shapes) seq :
-    mov(value(target) - value(bounds(child)), child)
-
-public defn attach<?T> (src:?T&Poseable, spos:V3f, dst:?T&Poseable, dpos:V3f) -> Seqable<T> :
-  [mov(dpos - spos, src), dst]
-
-public defn attach<?T> (src:?T&Poseable, si:Int, dst:?T&Poseable, di:Int) -> Seqable<T> :
-  attach(src, points(src)[si], dst, points(dst)[di])
-
-public defn align-min-x<?T> (shapes:Seqable<?T&Poseable>) -> Seq<T> :
-  align-it(shapes, { x(lo(_)) }, mov-x)
-
-public defn align-max-x<?T> (shapes:Seqable<?T&Poseable>) -> Seq<T> :
-  align-it(shapes, { x(hi(_)) }, mov-x)
-
-public defn align-min-y<?T> (shapes:Seqable<?T&Poseable>) -> Seq<T> :
-  align-it(shapes, { y(lo(_)) }, mov-y)
-
-public defn align-max-y<?T> (shapes:Seqable<?T&Poseable>) -> Seq<T> :
-  align-it(shapes, { y(hi(_)) }, mov-y)
-
-public defn align-min-z<?T> (shapes:Seqable<?T&Poseable>) -> Seq<T> :
-  align-it(shapes, { z(lo(_)) }, mov-z)
-
-public defn align-max-z<?T> (shapes:Seqable<?T&Poseable>) -> Seq<T> :
-  align-it(shapes, { z(hi(_)) }, mov-z)
 
 public defmulti jit-poseable (p:Poseable) -> AnyTree
 
@@ -1142,7 +816,7 @@ public var *render-offset* = 16.0f
 public defn slice (z:Float, s:Shape) -> Polygon :
   val bt = jit(s) as BoundedTree
   val eps = *render-offset* ;; 1.0f / *resolution*
-  val bds = Boxf(xy(lo(bounds(s)) + V3f((- eps), (- eps), z)), xy(hi(bounds(s)) + V3f(eps, eps, z)))
+  val bds = Box3f(xyz(xy(lo(bounds(s)))) + V3f((- eps), (- eps), z), xyz(xy(hi(bounds(s)))) + V3f(eps, eps, z))
   val start = current-time-ms()
   val poly = tree-render-slice(tree(bt), bds, *resolution*)
   ;; println-all(["RENDER-SLICE = " to-float(current-time-ms() - start) * 0.001f])
@@ -1153,7 +827,7 @@ public defn pixels (z:Float, s:Shape) -> Pixels :
   val bt = jit(s) as BoundedTree
   ;; val eps = *render-offset* ;; 1.0f / *resolution*
   val eps = 1.0f / *resolution*
-  val bds = Boxf(xy(lo(bounds(s)) + V3f((- eps), (- eps), z)), xy(hi(bounds(s)) + V3f(eps, eps, z)))
+  val bds = Box3f(xyz(xy(lo(bounds(s)))) + V3f((- eps), (- eps), z), xyz(xy(hi(bounds(s)))) + V3f(eps, eps, z))
   val start = current-time-ms()
   val pixels = tree-render-pixels(tree(bt), bds, *resolution*)
   ;; println-all(["RENDER-PIXELS = " to-float(current-time-ms() - start) * 0.001f])
@@ -1172,4 +846,25 @@ public defn save (filename:String, s:Shape) -> False :
   val bt = jit(s) as BoundedTree
   val eps = 1.0f / *resolution*
   tree-save-mesh(tree(bt), filename, fatten(bounds(s), eps), *resolution*)
+
+public deftype Glue <: ShapeGlue&Shape
+
+public defn Glue (amount:Float) :
+  new Glue :
+    defmethod fabber (this): fn (p:Vec3Field) : lit(pos-inf-f)
+    defmethod bounds (this): Box3f(V3f(0.0f, 0.0f, 0.0f), V3f(0.0f, 0.0f, 0.0f))
+    defmethod amount (this): amount
+
+defmethod glue-of (s:Shape, a:Float) -> Shape : Glue(a)
+defmethod glue-of (s:Assembly, a:Float) -> Assembly : AssemblyGlue(Glue(a))
+
+public defn empty () : Shape(lit{pos-inf-f}, neg-inf-box3f())
+public defn full () : Shape(lit{neg-inf-f}, pos-inf-box3f())
+
+defmethod spacer (g:Shape, gdims:V3f) : Shape(lit{pos-inf-f}, Box3f(dim-min(gdims), dim-max(gdims)))
+defmethod spacer (g:Assembly, dims:V3f) : Assembly(BLACK, [ spacer(empty(), dims) ])
+
+public defn spacer-x (gdim:Float) : spacer-x(gdim, empty())
+public defn spacer-y (gdim:Float) : spacer-y(gdim, empty())
+public defn spacer-z (gdim:Float) : spacer-z(gdim, empty())
 

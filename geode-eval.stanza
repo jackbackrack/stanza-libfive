@@ -1,4 +1,4 @@
-defpackage ao-eval :
+defpackage geode-eval :
    import core
    import math
    import collections
@@ -6,21 +6,21 @@ defpackage ao-eval :
    import geom
    import eval
    import shape
-   import ao
+   import geode
    import glu
    import font
-   import eval-ao-repl
+   import eval-geode-repl
 
 public defn shape-eval (e) :
   match(e) :
-    (g:Geom) : jit(g)
+    (g:Geom) : g
     (o) :      Msg(to-string(o))
 
-public defn eval-ao (s:String, ao-env:Frame) -> Geom :
+public defn eval-geode (s:String, geode-env:Frame) -> Geom :
   val forms = read-all(s)
   ;; println-all(["FORMS: " forms])
   val es = unwrap-all(parse(forms))
   ;; println-all(["EXP: "   es])
-  val e  = eval-begin(List(ao-env), es)
+  val e  = eval-begin(List(geode-env), es)
   ;; println-all(["G: " e])
   shape-eval(e)

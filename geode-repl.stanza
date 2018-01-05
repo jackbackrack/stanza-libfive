@@ -1,10 +1,10 @@
-defpackage ao-repl :
+defpackage geode-repl :
    import core
    import math
    import collections
    import geom
    import shape
-   import ao
+   import geode
    import sheet
    import glu
    import font

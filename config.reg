@@ -5,10 +5,18 @@ defregistry stanza-ao :
     package ao :
       dependency "${GEN}/ao.o"
       link * "${GEN}/ao.o -lao-kernel -lc++"
-  file "sheet.stanza"
   file "ao-gfx.stanza"
   file "ao-eval.stanza"
   file "ao-repl.stanza"
   file "eval-ao-repl.stanza" gen :
     package eval-ao-repl
-  file "ao-eval.stanza"
+  ;; file "geode.stanza" :
+  ;;   package geode :
+  ;;     link * "${GEN}/cad.a -lgeode -lc++"
+  ;; file "geode-gfx.stanza"
+  ;; file "geode-eval.stanza"
+  ;; file "geode-repl.stanza"
+  ;; file "eval-geode-repl.stanza" gen :
+  ;;   package eval-geode-repl
+  file "shape.stanza"
+  file "sheet.stanza"
