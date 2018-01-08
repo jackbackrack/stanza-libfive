@@ -6,6 +6,7 @@ defpackage ao :
   import glu
   import geom
   import shape
+  import grid
 
 lostanza deftype ao_interval :
   lower : float
@@ -667,13 +668,13 @@ public defn abs-y (s:Shape) -> Shape :
                         set-elt(hi(bounds(s)), 1, max(hi(bounds(s))[1], 0.0f)))
   Shape(fabber(res), new-bounds)
 
-public defn to-field2 (m:Mesh) -> Shape :
+public defn to-shape (m:Mesh) -> Shape :
   val verts = vertices(m)
   union(for face in faces(m) seq :
           triangle(verts[face[0]], verts[face[1]], verts[face[2]]))
 
-public defn to-field2 (p:Polygon) -> Shape :
-  to-field2(triangulate(p))
+public defn to-shape (p:Polygon) -> Shape :
+  to-shape(triangulate(p))
 
 public defn triangle (a:V3f, b:V3f, c:V3f) -> Shape :
   convex([a, b, c])
@@ -832,6 +833,15 @@ public defn pixels (z:Float, s:Shape) -> Pixels :
   val pixels = tree-render-pixels(tree(bt), bds, *resolution*)
   ;; println-all(["RENDER-PIXELS = " to-float(current-time-ms() - start) * 0.001f])
   pixels
+
+;; public defn pixels (z:Float, s:Shape) -> Pixels :
+;;   val poly = slice(z, s)
+;;   val dim = 1.0f / *resolution*
+;;   val gdims = xyz(xy(to-v3i(round(dims(bounds(s)) / dim)))) + V3i(0, 0, 1)
+;;   println("GRID DIM %_ BOUNDS %_ DIMS %_ GDIMS %_" % [dim bounds(s) dims(bounds(s)) gdims])
+;;   val grid = Grid(gdims, dim)
+;;   scan(grid, poly)
+;;   to-pixels(grid)
 
 public defn dump (filename:String, s:Shape) -> False :
   val bt = jit(s) as BoundedTree
