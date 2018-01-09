@@ -1,15 +1,15 @@
 defregistry stanza-ao :
-  file "ao.cpp" :
+  file "libfive.cpp" :
     flags "-std=c++11 -I/usr/local/include/eigen3"
-  file "ao.stanza" :
-    package ao :
-      dependency "${GEN}/ao.o"
-      link * "${GEN}/ao.o -lao-kernel -lc++"
-  file "ao-gfx.stanza"
-  file "ao-eval.stanza"
-  file "ao-repl.stanza"
-  file "eval-ao-repl.stanza" gen :
-    package eval-ao-repl
+  file "libfive.stanza" :
+    package libfive :
+      dependency "${GEN}/libfive.o"
+      link * "${GEN}/libfive.o -lfive -lc++"
+  file "libfive-gfx.stanza"
+  file "libfive-eval.stanza"
+  file "libfive-repl.stanza"
+  file "eval-libfive-repl.stanza" gen :
+    package eval-libfive-repl
   ;; file "geode.stanza" :
   ;;   package geode :
   ;;     link * "${GEN}/cad.a -lgeode -lc++"

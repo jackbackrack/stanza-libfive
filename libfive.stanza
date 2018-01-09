@@ -1,4 +1,4 @@
-defpackage ao :
+defpackage libfive :
   import core
   import math
   import collections
@@ -8,92 +8,92 @@ defpackage ao :
   import shape
   import grid
 
-lostanza deftype ao_interval :
+lostanza deftype libfive_interval :
   lower : float
   upper : float
 
-lostanza deftype ao_region2 :
-  X : ao_interval
-  Y : ao_interval
+lostanza deftype libfive_region2 :
+  X : libfive_interval
+  Y : libfive_interval
 
-lostanza deftype ao_region3 :
-  X : ao_interval
-  Y : ao_interval
-  Z : ao_interval
+lostanza deftype libfive_region3 :
+  X : libfive_interval
+  Y : libfive_interval
+  Z : libfive_interval
 
-lostanza deftype ao_vec2 :
+lostanza deftype libfive_vec2 :
   x : float
   y : float
 
-lostanza deftype ao_vec3 :
+lostanza deftype libfive_vec3 :
   x : float
   y : float
   z : float
 
-lostanza deftype ao_vec4 :
+lostanza deftype libfive_vec4 :
   x : float
   y : float
   z : float
   w : float
 
-lostanza deftype ao_tri :
+lostanza deftype libfive_tri :
   a : int
   b : int
   c : int
 
-lostanza deftype ao_contour :
-  pts : ptr<ao_vec2>
+lostanza deftype libfive_contour :
+  pts : ptr<libfive_vec2>
   count : int
 
-lostanza deftype ao_contours :
-  cs : ptr<ao_contour>
+lostanza deftype libfive_contours :
+  cs : ptr<libfive_contour>
   count : int
 
-lostanza deftype AoContours :
-  value : ptr<ao_contours>
+lostanza deftype LibfiveContours :
+  value : ptr<libfive_contours>
 
-lostanza deftype ao_mesh :
-  verts : ptr<ao_vec3>
-  tris : ptr<ao_tri>
+lostanza deftype libfive_mesh :
+  verts : ptr<libfive_vec3>
+  tris : ptr<libfive_tri>
   tri-count : int
   vert-count : int
 
-lostanza deftype AoMesh :
-  value : ptr<ao_mesh>
+lostanza deftype LibfiveMesh :
+  value : ptr<libfive_mesh>
 
-lostanza deftype ao_pixels :
+lostanza deftype libfive_pixels :
   data : ptr<byte>
   width : int
   height : int
 
-lostanza deftype AoPixels :
-  value : ptr<ao_pixels>
+lostanza deftype LibfivePixels :
+  value : ptr<libfive_pixels>
 
-lostanza defn width (p:ref<AoPixels>) -> ref<Int> :
+lostanza defn width (p:ref<LibfivePixels>) -> ref<Int> :
   return new Int{p.value.width}
 
-lostanza defn height (p:ref<AoPixels>) -> ref<Int> :
+lostanza defn height (p:ref<LibfivePixels>) -> ref<Int> :
   return new Int{p.value.height}
 
 extern memcpy: (ptr<byte>, ptr<byte>, int) -> ptr<byte>
 
-extern ao_tree_x: () -> ptr<?>
-extern ao_tree_y: () -> ptr<?>
-extern ao_tree_z: () -> ptr<?>
-extern ao_tree_const: (float) -> ptr<?>
-extern ao_tree_unary: (int, ptr<?>) -> ptr<?>
-extern ao_tree_binary: (int, ptr<?>, ptr<?>) -> ptr<?>
-extern ao_opcode_enum: (ptr<?>) -> int
-extern ao_tree_delete: (ptr<?>) -> int
-extern ao_tree_save: (ptr<?>, ptr<byte>) -> int
-extern ao_tree_save_mesh_spread: (ptr<?>, float, float, float, float, float, float, float, ptr<byte>) -> int
-extern ao_tree_save_slice_spread: (ptr<?>, float, float, float, float, float, float, ptr<byte>) -> int
-extern ao_tree_render_mesh_spread: (ptr<?>, float, float, float, float, float, float, float) -> ptr<ao_mesh>
-extern ao_tree_render_slice_spread: (ptr<?>, float, float, float, float, float, float) -> ptr<ao_contours>
-extern ao_tree_render_pixels_spread: (ptr<?>, float, float, float, float, float, float) -> ptr<ao_pixels>
-extern ao_contours_delete: (ptr<ao_contours>) -> int
-extern ao_mesh_delete: (ptr<ao_mesh>) -> int
-extern ao_pixels_delete: (ptr<ao_pixels>) -> int
+extern libfive_tree_x: () -> ptr<?>
+extern libfive_tree_y: () -> ptr<?>
+extern libfive_tree_z: () -> ptr<?>
+extern libfive_tree_const: (float) -> ptr<?>
+extern libfive_tree_unary: (int, ptr<?>) -> ptr<?>
+extern libfive_tree_binary: (int, ptr<?>, ptr<?>) -> ptr<?>
+extern libfive_opcode_enum: (ptr<?>) -> int
+extern libfive_tree_delete: (ptr<?>) -> int
+extern libfive_tree_save: (ptr<?>, ptr<byte>) -> int
+extern libfive_tree_save_mesh_spread: (ptr<?>, float, float, float, float, float, float, float, ptr<byte>) -> int
+extern libfive_tree_save_slice_spread: (ptr<?>, float, float, float, float, float, float, ptr<byte>) -> int
+extern libfive_tree_render_mesh_spread: (ptr<?>, float, float, float, float, float, float, float) -> ptr<libfive_mesh>
+extern libfive_tree_render_slice_spread: (ptr<?>, float, float, float, float, float, float) -> ptr<libfive_contours>
+extern libfive_tree_render_pixels_spread: (ptr<?>, float, float, float, float, float, float) -> ptr<libfive_pixels>
+extern libfive_contours_delete: (ptr<libfive_contours>) -> int
+extern libfive_mesh_delete: (ptr<libfive_mesh>) -> int
+extern libfive_pixels_delete: (ptr<libfive_pixels>) -> int
 extern printf: (ptr<?>, ? ...) -> int
 extern free: (ptr<?>) -> int
 
@@ -227,36 +227,36 @@ public defstruct TreeAssembly <: AnyTree :
 
 
 public lostanza defn tree-delete (t:ref<Tree>) -> ref<False> :
-  call-c ao_tree_delete(t.value)
+  call-c libfive_tree_delete(t.value)
   return false
 
 public lostanza defn tree-save (t:ref<Tree>, filename:ref<String>) -> ref<False> :
-  call-c ao_tree_save(t.value, addr!(filename.chars))
+  call-c libfive_tree_save(t.value, addr!(filename.chars))
   return false
 
 public lostanza defn tree-save-mesh (t:ref<Tree>, filename:ref<String>, box:ref<Box3f>, res:ref<Float>) -> ref<False> :
-  call-c ao_tree_save_mesh_spread(t.value, x(lo(box)).value, x(hi(box)).value, y(lo(box)).value, y(hi(box)).value, z(lo(box)).value, z(hi(box)).value, res.value, addr!(filename.chars))
+  call-c libfive_tree_save_mesh_spread(t.value, x(lo(box)).value, x(hi(box)).value, y(lo(box)).value, y(hi(box)).value, z(lo(box)).value, z(hi(box)).value, res.value, addr!(filename.chars))
   return false
 
 public lostanza defn tree-save-slice (t:ref<Tree>, filename:ref<String>, box:ref<Box3f>, res:ref<Float>) -> ref<False> :
-  call-c ao_tree_save_slice_spread(t.value, x(lo(box)).value, x(hi(box)).value, y(lo(box)).value, y(hi(box)).value, z(lo(box)).value, res.value, addr!(filename.chars))
+  call-c libfive_tree_save_slice_spread(t.value, x(lo(box)).value, x(hi(box)).value, y(lo(box)).value, y(hi(box)).value, z(lo(box)).value, res.value, addr!(filename.chars))
   return false
 
-public lostanza defn get-vert-value (m:ref<AoMesh>, i:ref<Int>) -> ref<V3f> :
+public lostanza defn get-vert-value (m:ref<LibfiveMesh>, i:ref<Int>) -> ref<V3f> :
   val vert = m.value.verts[i.value]
   return V3f(new Float{vert.x}, new Float{vert.y}, new Float{vert.z})
 
-public lostanza defn get-vert-index (m:ref<AoMesh>, i:ref<Int>) -> ref<V3i> :
+public lostanza defn get-vert-index (m:ref<LibfiveMesh>, i:ref<Int>) -> ref<V3i> :
   val tri = m.value.tris[i.value]
   return V3i(new Int{tri.a}, new Int{tri.b}, new Int{tri.c})
 
-public lostanza defn tri-count (m:ref<AoMesh>) -> ref<Int> :
+public lostanza defn tri-count (m:ref<LibfiveMesh>) -> ref<Int> :
   return new Int{m.value.tri-count}
 
-public lostanza defn vert-count (m:ref<AoMesh>) -> ref<Int> :
+public lostanza defn vert-count (m:ref<LibfiveMesh>) -> ref<Int> :
   return new Int{m.value.vert-count}
 
-defn to-mesh (rm:AoMesh) -> Mesh :
+defn to-mesh (rm:LibfiveMesh) -> Mesh :
   ;; println-all(["STZ MESH COUNT " tri-count(rm)])
   val tris = to-tuple $ for ti in 0 to tri-count(rm) seq : get-vert-index(rm, ti)
   ;; for (tri in tris, i in 0 to 4) do :
@@ -267,17 +267,17 @@ defn to-mesh (rm:AoMesh) -> Mesh :
   Mesh(verts, tris)
 
 public lostanza defn tree-render-mesh (t:ref<Tree>, box:ref<Box3f>, res:ref<Float>) -> ref<Mesh> :
-  val out = call-c ao_tree_render_mesh_spread(t.value, x(lo(box)).value, x(hi(box)).value, y(lo(box)).value, y(hi(box)).value, z(lo(box)).value, z(hi(box)).value, res.value)
-  val c-mesh = new AoMesh{out}
+  val out = call-c libfive_tree_render_mesh_spread(t.value, x(lo(box)).value, x(hi(box)).value, y(lo(box)).value, y(hi(box)).value, z(lo(box)).value, z(hi(box)).value, res.value)
+  val c-mesh = new LibfiveMesh{out}
   val mesh = to-mesh(c-mesh)
-  call-c ao_mesh_delete(out)
+  call-c libfive_mesh_delete(out)
   return mesh
 
-lostanza defn copy-bytes (b:ref<ByteArray>, p:ref<AoPixels>, n:ref<Int>) -> ref<False> :
+lostanza defn copy-bytes (b:ref<ByteArray>, p:ref<LibfivePixels>, n:ref<Int>) -> ref<False> :
   call-c memcpy(addr!(b.data), p.value.data, n.value)
   return false
 
-defn to-pixels (p:AoPixels, res:Float) -> Pixels :
+defn to-pixels (p:LibfivePixels, res:Float) -> Pixels :
   val width = width(p)
   val height = height(p)
   val tot = width * height
@@ -287,25 +287,25 @@ defn to-pixels (p:AoPixels, res:Float) -> Pixels :
   Pixels(V3i(width, height, 1), 1.0f / res, data)
 
 public lostanza defn tree-render-pixels (t:ref<Tree>, box:ref<Box3f>, res:ref<Float>) -> ref<Pixels> :
-  val out = call-c ao_tree_render_pixels_spread(t.value, x(lo(box)).value, x(hi(box)).value, y(lo(box)).value, y(hi(box)).value,  z(lo(box)).value, res.value)
-  val c-pixels = new AoPixels{out}
+  val out = call-c libfive_tree_render_pixels_spread(t.value, x(lo(box)).value, x(hi(box)).value, y(lo(box)).value, y(hi(box)).value,  z(lo(box)).value, res.value)
+  val c-pixels = new LibfivePixels{out}
   val pixels = to-pixels(c-pixels, res)
-  call-c ao_pixels_delete(out)
+  call-c libfive_pixels_delete(out)
   return pixels
 
-lostanza defn get (contours:ref<AoContours>, c:ref<Int>, i:ref<Int>) -> ref<V2f> :
+lostanza defn get (contours:ref<LibfiveContours>, c:ref<Int>, i:ref<Int>) -> ref<V2f> :
   val contour = contours.value.cs[c.value]
   val pt      = contour.pts[i.value]
   return V2f(new Float{pt.x}, new Float{pt.y})
 
-lostanza defn get-contour-size (contours:ref<AoContours>, i:ref<Int>) -> ref<Int> :
+lostanza defn get-contour-size (contours:ref<LibfiveContours>, i:ref<Int>) -> ref<Int> :
   val contour = contours.value.cs[i.value]
   return new Int{contour.count}
 
-lostanza defn num-contours (cs:ref<AoContours>) -> ref<Int> :
+lostanza defn num-contours (cs:ref<LibfiveContours>) -> ref<Int> :
   return new Int{cs.value.count}
 
-defn to-polygon (cs:AoContours) -> Polygon :
+defn to-polygon (cs:LibfiveContours) -> Polygon :
   val contours =
     for ci in 0 to num-contours(cs) seq :
       val points = for j in 0 to get-contour-size(cs, ci) seq : cs[ci, j]
@@ -313,28 +313,28 @@ defn to-polygon (cs:AoContours) -> Polygon :
   Polygon(to-tuple $ contours)
 
 public lostanza defn tree-render-slice (t:ref<Tree>, box:ref<Box3f>, res:ref<Float>) -> ref<Polygon> :
-  val out = call-c ao_tree_render_slice_spread(t.value, x(lo(box)).value, x(hi(box)).value, y(lo(box)).value, y(hi(box)).value, z(lo(box)).value, res.value)
-  val slice = new AoContours{out}
+  val out = call-c libfive_tree_render_slice_spread(t.value, x(lo(box)).value, x(hi(box)).value, y(lo(box)).value, y(hi(box)).value, z(lo(box)).value, res.value)
+  val slice = new LibfiveContours{out}
   val poly = to-polygon(slice)
-  call-c ao_contours_delete(out)
+  call-c libfive_contours_delete(out)
   return poly
 
 public lostanza defn fab-x () -> ref<FloField> :
-  return FloFieldOp(new Tree{call-c ao_tree_x()}, String("X"), List())
+  return FloFieldOp(new Tree{call-c libfive_tree_x()}, String("X"), List())
 public lostanza defn fab-y () -> ref<FloField> :
-  return FloFieldOp(new Tree{call-c ao_tree_y()}, String("Y"), List())
+  return FloFieldOp(new Tree{call-c libfive_tree_y()}, String("Y"), List())
 public lostanza defn fab-z () -> ref<FloField> :
-  return FloFieldOp(new Tree{call-c ao_tree_z()}, String("Z"), List())
+  return FloFieldOp(new Tree{call-c libfive_tree_z()}, String("Z"), List())
 public lostanza defn lit (f:ref<Float>) -> ref<FloField> :
-  return FloFieldLit(new Tree{call-c ao_tree_const(f.value)}, f)
+  return FloFieldLit(new Tree{call-c libfive_tree_const(f.value)}, f)
 public lostanza defn lit (f:ref<Double>) -> ref<FloField> :
   return lit(to-float(f))
 public lostanza defn opcode (name:ref<String>) -> ref<Int> :
-  return new Int{call-c ao_opcode_enum(addr!(name.chars))}
+  return new Int{call-c libfive_opcode_enum(addr!(name.chars))}
 public lostanza defn unary (op:ref<String>, t:ref<FloField>) -> ref<FloField> :
-  return FloFieldOp(new Tree{call-c ao_tree_unary(opcode(op).value, tree(t).value)}, op, List(t))
+  return FloFieldOp(new Tree{call-c libfive_tree_unary(opcode(op).value, tree(t).value)}, op, List(t))
 public lostanza defn binary (op:ref<String>, t1:ref<FloField>, t2:ref<FloField>) -> ref<FloField> :
-  return FloFieldOp(new Tree{call-c ao_tree_binary(opcode(op).value, tree(t1).value, tree(t2).value)}, op, List(t1, t2))
+  return FloFieldOp(new Tree{call-c libfive_tree_binary(opcode(op).value, tree(t1).value, tree(t2).value)}, op, List(t1, t2))
 public defn min-lit () : lit(neg-inf-f)
 public defn max-lit () : lit(pos-inf-f)
 
