@@ -85,6 +85,7 @@ extern libfive_tree_unary: (int, ptr<?>) -> ptr<?>
 extern libfive_tree_binary: (int, ptr<?>, ptr<?>) -> ptr<?>
 extern libfive_opcode_enum: (ptr<?>) -> int
 extern libfive_tree_delete: (ptr<?>) -> int
+extern libfive_tree_bounds_star: (ptr<?>) -> ptr<libfive_region3>
 extern libfive_tree_save: (ptr<?>, ptr<byte>) -> int
 extern libfive_tree_save_mesh_spread: (ptr<?>, float, float, float, float, float, float, float, ptr<byte>) -> int
 extern libfive_tree_save_slice_spread: (ptr<?>, float, float, float, float, float, float, ptr<byte>) -> int
@@ -272,6 +273,13 @@ public lostanza defn tree-render-mesh (t:ref<Tree>, box:ref<Box3f>, res:ref<Floa
   val mesh = to-mesh(c-mesh)
   call-c libfive_mesh_delete(out)
   return mesh
+
+public lostanza defn tree-bounds (t:ref<Tree>) -> ref<Box3f> :
+  val out = call-c libfive_tree_bounds_star(t.value)
+  val res = Box3f(V3f(new Float{out.X.lower}, new Float{out.Y.lower}, new Float{out.Z.lower}),
+                  V3f(new Float{out.X.upper}, new Float{out.Y.upper}, new Float{out.Z.upper}))
+  call-c free(out)
+  return res
 
 lostanza defn copy-bytes (b:ref<ByteArray>, p:ref<LibfivePixels>, n:ref<Int>) -> ref<False> :
   call-c memcpy(addr!(b.data), p.value.data, n.value)
@@ -752,31 +760,41 @@ public defn box (dims:V3f) -> Shape :
 public defn round-box (dims:V3f, r:Float) -> Shape :
   offset(box(dims), r)
 
-public defn capsule (a:V3f, b:V3f, d:Float) -> Shape :
-  val r  = 0.5f * d
-  defn fab (p) :
-    val pa = p - lit(a)
-    val ba = b - a
-    val h  = clamp(dot(pa, lit(ba)) / lit(dot(ba, ba)), lit(0.0), lit(1.0))
-    len(pa - h * lit(ba)) - lit(r)
-  Shape(fab, fatten(Box3f(a, a) | Box3f(b, b), r))
+;; public defn capsule (a:V3f, b:V3f, d:Float) -> Shape :
+;;   val r  = 0.5f * d
+;;   defn fab (p) :
+;;     val pa = p - lit(a)
+;;     val ba = b - a
+;;     val h  = clamp(dot(pa, lit(ba)) / lit(dot(ba, ba)), lit(0.0), lit(1.0))
+;;     len(pa - h * lit(ba)) - lit(r)
+;;   Shape(fab, fatten(Box3f(a, a) | Box3f(b, b), r))
 
-public defn capsule (d:Float, h:Float) -> Shape :
+public defn capsule3 (d:Float, h:Float, ) -> Shape :
   val r = 0.5f * h
   cylinder(d, h) | mov-z(r, sphere(d)) | mov-z((- r), sphere(d))
 
-public defn capsule2 (w:Float, h:Float) -> Shape :
+public defn capsule2 (d:Float, w:Float) -> Shape :
   val r = 0.5f * w
-  rect(w, h) | mov-x(r, circle(h)) | mov-x((- r), circle(h))
+  rect(w, d) | mov-x(r, circle(d)) | mov-x((- r), circle(d))
 
-public defn capsule2 (a:V3f, b:V3f, d:Float) -> Shape :
-  val r  = 0.5f * d
-  defn fab (p) :
-    val pa = xy(p) - lit(a)
-    val ba = b - a
-    val h  = clamp(dot(pa, lit(ba)) / lit(dot(ba, ba)), lit(0.0), lit(1.0))
-    len(pa - h * lit(ba)) - lit(r)
-  Shape(fab, fatten(Box3f(a, a) | Box3f(b, b), r))
+public defn capsule (a:V3f, b:V3f, d:Float) -> Shape :
+  val v = b - a
+  val c = 0.5f * (a + b)
+  mov(c) $ rot(V3f(0.0f, 0.0f, d), v) $ capsule3(d, magnitude(v))
+
+public defn capsule (a:V2f, b:V2f, d:Float) -> Shape :
+  val v = b - a
+  val c = xyz(0.5f * (a + b))
+  mov(c) $ rot(V2f(d, 0.0f), v) $ capsule2(d, magnitude(v))
+
+;; public defn capsule2 (a:V3f, b:V3f, d:Float) -> Shape :
+;;   val r  = 0.5f * d
+;;   defn fab (p) :
+;;     val pa = xy(p) - lit(a)
+;;     val ba = b - a
+;;     val h  = clamp(dot(pa, lit(ba)) / lit(dot(ba, ba)), lit(0.0), lit(1.0))
+;;     len(pa - h * lit(ba)) - lit(r)
+;;   Shape(fab, fatten(Box3f(a, a) | Box3f(b, b), r))
 
 public defn thicken (g:PolyLine2f|Contour|Polygon, f:(V2f, V2f, Float) -> Shape, d:Float) -> Shape :
   thicken(segments(g), f, d)
@@ -856,6 +874,11 @@ public defn save (filename:String, s:Shape) -> False :
   val bt = jit(s) as BoundedTree
   val eps = 1.0f / *resolution*
   tree-save-mesh(tree(bt), filename, fatten(bounds(s), eps), *resolution*)
+
+public defn empty? (s:Shape) -> True|False :
+  val bt = jit(s) as BoundedTree
+  val bounds = tree-bounds(tree(bt))
+  empty?(bounds) or empty?(vertices(tree-render-mesh(tree(bt), bounds, *resolution*)))
 
 public deftype Glue <: ShapeGlue&Shape
 

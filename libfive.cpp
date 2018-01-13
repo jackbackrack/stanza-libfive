@@ -28,6 +28,8 @@ bool libfive_tree_save_slice_spread(libfive_tree tree, float lx, float ux, float
 libfive_mesh* libfive_tree_render_mesh_spread(libfive_tree tree, float lx, float ux, float ly, float uy, float lz, float uz,
                                     float res);
   
+libfive_region3* libfive_tree_bounds_star(libfive_tree tree);
+
 }
 
 bool libfive_tree_save_mesh_spread(libfive_tree tree, float lx, float ux, float ly, float uy, float lz, float uz,
@@ -62,3 +64,9 @@ libfive_mesh* libfive_tree_render_mesh_spread(libfive_tree tree, float lx, float
   return libfive_tree_render_mesh(tree, region, res);
 }
   
+libfive_region3* libfive_tree_bounds_star(libfive_tree tree) {
+  libfive_region3* region = (libfive_region3*)malloc(sizeof(libfive_region3));
+  *region = libfive_tree_bounds(tree);
+  return region;
+}
+

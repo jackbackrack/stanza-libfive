@@ -108,7 +108,7 @@ public defn get-square-teeth (i:Box3f, n-slots:Int) : get-square-teeth(i, n-slot
 ;;   ;; println-all(["ROT-MAT44F S0 " src0 " S1 " src1 " D0 " dst0 " D1 " dst1])
 ;;   rot-mat44f(V3f-unit(src0), V3f-unit(src1), V3f-unit(dst0), V3f-unit(dst1))
 
-public defn rot-mat44f (src:V3f, dst:V3f) -> Mat44f :
+public defn rot-mat44f-90 (src:V3f, dst:V3f) -> Mat44f :
   if src == dst :
     ;; println-all(["ROT NONE"])
     id-mat44f()
@@ -123,8 +123,8 @@ public defn rot-mat44f (src:V3f, dst:V3f) -> Mat44f :
       reflect-xy-mat44f()
 
 public defn rot-mat44f (src0:V3f, src1:V3f, dst0:V3f, dst1:V3f) -> Mat44f :
-  val mat0 = rot-mat44f(src0, dst0)
-  val mat1 = rot-mat44f(mat0 * src1, dst1)
+  val mat0 = rot-mat44f-90(src0, dst0)
+  val mat1 = rot-mat44f-90(mat0 * src1, dst1)
   mat0 * mat1
 
 public defn rot-mat44f (src0:Int, src1:Int, dst0:Int, dst1:Int) -> Mat44f :
