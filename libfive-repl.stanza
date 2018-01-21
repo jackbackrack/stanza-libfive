@@ -3,7 +3,6 @@ defpackage libfive-repl :
    import math
    import collections
    import geom
-   import shape
    import libfive
    import sheet
    import glu
@@ -11,5 +10,3 @@ defpackage libfive-repl :
    import utils
    import grid
    import nester
-
-

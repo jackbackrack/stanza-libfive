@@ -5,7 +5,6 @@ defpackage libfive :
   import utils
   import glu
   import geom
-  import shape
   import grid
 
 lostanza deftype libfive_interval :
@@ -161,38 +160,39 @@ defmethod equal? (a:FloFieldOp, b:FloFieldOp) -> True|False :
   op(a) == op(b) and all?(equal?, args(a), args(b))
 
 defmethod count (f:FloFieldOp) -> Int :
-  1 + reduce(plus, 0, seq(count, args(f)))
+  1 + reduce(i+, 0, seq(count, args(f)))
 
 public defmulti mesh (s:Shape) -> False|Mesh
 public defmulti cache (s:Shape) -> HashTable<Vec3Field,FloField>
 public defmulti fabber (s:Shape) -> ((Vec3Field) -> FloField)
 public defmulti set-mesh (s:Shape, m:Mesh) -> False
 
-public defn Shape (fabber:(Vec3Field) -> FloField, bounds:Box3f, name:False|Symbol, tags:Tuple<Symbol>, points:Tuple<V3f>) :
+public defn Shape (fabber:(Vec3Field) -> FloField, bounds:Box3f, state:AnyShapeState) :
   val cache = HashTable<Vec3Field,FloField>()
   var mesh:False|Mesh = false
   new Shape :
-    defmethod fabber (this) : fabber
     defmethod bounds (this) : bounds
-    defmethod points (this) : points
+    defmethod state (this) : state
+    defmethod any-shapes (this) : [ this ]
+    defmethod fabber (this) : fabber
     defmethod cache (this) : cache
-    defmethod name (this) : name
-    defmethod tags (this) : tags
-    defmethod shapes (this) : [ this ]
     defmethod mesh (this) : mesh
     defmethod set-mesh (this, m:Mesh) : mesh = m
 
+public defn Shape (fabber:(Vec3Field) -> FloField, bounds:Box3f, name:False|Symbol, color:V4f, tags:Tuple<Symbol>, points:Tuple<V3f>) :
+  Shape(fabber, bounds, AnyShapeState(name, color, tags, points))
+
 public defn Shape (fabber:(Vec3Field) -> FloField, bounds:Box3f) :
-  Shape(fabber, bounds, false, [], [])
+  Shape(fabber, bounds, false, WHITE, [], [])
 
-public defmethod clone (s:Shape, name:Symbol, points:Tuple<V3f>, tags:Tuple<Symbol>) -> Shape :
-  Shape(fabber(s), bounds(s), name, tags, points)
+defmethod clone (shape:Shape, state:AnyShapeState) -> Shape :
+  Shape(fabber(shape), bounds(shape), state)
 
-public defn Shape (s:Shape, bounds:Box3f, name:False|Symbol, tags:Tuple<Symbol>, points:Tuple<V3f>) :
-  Shape(fabber(s), bounds, name, tags, points)
+public defn Shape (s:Shape, bounds:Box3f, name:False|Symbol, color:V4f, tags:Tuple<Symbol>, points:Tuple<V3f>) :
+  Shape(fabber(s), bounds, name, color, tags, points)
 
 public defn Shape (s:Shape, bounds:Box3f) :
-  Shape(s, bounds, name(s), tags(s), points(s))
+  Shape(s, bounds, name(s), WHITE, tags(s), points(s))
 
 defn fab (s:Shape, p:Vec3Field) -> FloField :
   fabber(s)(p)
@@ -419,7 +419,7 @@ public defmulti y (v:Vec3Field) -> FloField
 public defmulti z (v:Vec3Field) -> FloField
 public defmulti id (v:Vec3Field) -> Int
 
-var nxt-id = -1
+var nxt-id:Int = -1
 
 defn new-id () :
   nxt-id = nxt-id + 1
@@ -527,26 +527,12 @@ public defn modulo (a:Vec3Field, b:Vec3Field) -> Vec3Field :
             x(a) * y(b) - y(a) * x(b))
 
 public defn with-xyz (mat:Mat44f, f:(Vec3Field) -> Vec3Field, s:Shape) -> Shape :
-  Shape(fn (p): fab(s, f(p)), mat * bounds(s), name(s), tags(s), to-tuple $ seq({mat * _} points(s)))
+  Shape(fn (p): fab(s, f(p)), mat * bounds(s), name(s), color(s), tags(s), to-tuple $ seq({mat * _} points(s)))
 
 public defmethod xyz (mat:Mat44f, s:Shape) -> Shape :
   with-xyz(mat, fn (p) : inverse(mat) * p, s)
 
 public defn xy (s:Shape) -> Shape : xy(0.0f, s)
-
-;; TODO
-defmethod rgb (c:V4f, s:Shape) -> Shape :
-  s
-
-defmethod mov (dp:V3f, s:Shape) -> Shape :
-  xyz(mov-mat44f(dp), s)
-
-defmethod mov (dp:V3f, s:Assembly) -> Assembly :
-  xyz(mov-mat44f(dp), s)
-
-;; public defn mov (dx:FloField, dy:FloField, f:Shape) -> FloField :
-;;   mov(dx, dy, lit(0.0), f)
-
 
 defn shear-x-y (ymin:Float, ymax:Float, dx0:Float, dx1:Float, s:Shape) -> Shape :
   defn xf (p) :
@@ -614,25 +600,25 @@ public defn extrude (h:Float, shape:Shape) -> Shape :
 public defn extrude (h:Float) : extrude{h, _}
 
 public defn bit-or (a:Shape, b:Shape) -> Shape :
-  Shape(fn (p): min(fab(a, p), fab(b, p)), bounds(a) | bounds(b), name(a, b), tags(a, b), points(a, b))
+  Shape(fn (p): min(fab(a, p), fab(b, p)), bounds(a) | bounds(b), name(a, b), color(a, b), tags(a, b), points(a, b))
 
 public defn intersection (args:Seqable<Shape>) -> Shape :
   reduce(bit-and, args)
 
 public defn bit-and (a:Shape, b:Shape) -> Shape :
-  Shape(fn (p): max(fab(a, p), fab(b, p)), bounds(a) & bounds(b), name(a, b), tags(a, b), points(a, b))
+  Shape(fn (p): max(fab(a, p), fab(b, p)), bounds(a) & bounds(b), name(a, b), color(a, b), tags(a, b), points(a, b))
 
 public defn invert (s:Shape) -> Shape :
   Shape(fn (p): (- fab(s, p)), pos-inf-box3f())
 
 public defn rem (a:Shape, b:Shape) -> Shape :
-  Shape(a & invert(b), bounds(a), name(a, b), tags(a, b), points(a, b))
+  Shape(a & invert(b), bounds(a), name(a, b), color(a, b), tags(a, b), points(a, b))
 
 public defn offset (s:Shape, o:Float) -> Shape :
-  Shape(fn (p): fab(s, p) - lit(o), fatten(bounds(s), o), name(s), tags(s), points(s))
+  Shape(fn (p): fab(s, p) - lit(o), fatten(bounds(s), xyz(o)), name(s), color(s), tags(s), points(s))
   
 public defn clearance (a:Shape, b:Shape, o:Float) -> Shape :
-  Shape(a & invert(offset(b, (- o))), bounds(a), name(a, b), tags(a, b), points(a))
+  Shape(a & invert(offset(b, (- o))), bounds(a), name(a, b), color(a, b), tags(a, b), points(a))
   
 public defn shell (s:Shape, o:Float) -> Shape :
   clearance(s, s, o)
@@ -832,6 +818,8 @@ public defn jit (g:Geom) -> Geom :
 public var *resolution* = 8.0f
 public var *render-offset* = 16.0f
 
+public defn set-resolution (r:Float) : *resolution* = r
+
 public defn slice (z:Float, s:Shape) -> Polygon :
   val bt = jit(s) as BoundedTree
   val eps = *render-offset* ;; 1.0f / *resolution*
@@ -868,12 +856,12 @@ public defn dump (filename:String, s:Shape) -> False :
 public defn save (z:Float, filename:String, s:Shape) -> False :
   val bt = jit(s) as BoundedTree
   val eps = 1.0f / *resolution*
-  tree-save-slice(tree(bt), filename, fatten(bounds(s), eps), *resolution*)
+  tree-save-slice(tree(bt), filename, fatten(bounds(s), xyz(eps)), *resolution*)
 
 public defn save (filename:String, s:Shape) -> False :
   val bt = jit(s) as BoundedTree
   val eps = 1.0f / *resolution*
-  tree-save-mesh(tree(bt), filename, fatten(bounds(s), eps), *resolution*)
+  tree-save-mesh(tree(bt), filename, fatten(bounds(s), xyz(eps)), *resolution*)
 
 public defn empty? (s:Shape) -> True|False :
   val bt = jit(s) as BoundedTree
@@ -895,7 +883,7 @@ public defn empty () : Shape(lit{pos-inf-f}, neg-inf-box3f())
 public defn full () : Shape(lit{neg-inf-f}, pos-inf-box3f())
 
 defmethod spacer (g:Shape, gdims:V3f) : Shape(lit{pos-inf-f}, Box3f(dim-min(gdims), dim-max(gdims)))
-defmethod spacer (g:Assembly, dims:V3f) : Assembly(BLACK, [ spacer(empty(), dims) ])
+defmethod spacer (g:Assembly, dims:V3f) : rgb(BLACK, Assembly([ spacer(empty(), dims) ]))
 
 public defn spacer-x (gdim:Float) : spacer-x(gdim, empty())
 public defn spacer-y (gdim:Float) : spacer-y(gdim, empty())

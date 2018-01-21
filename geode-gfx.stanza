@@ -9,7 +9,6 @@ defpackage geode-gfx:
   import gfx
   import font
   import geom-gfx
-  import shape
   import geode
 
 defmethod render (p:g-polygon) -> False :

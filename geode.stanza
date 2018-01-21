@@ -4,7 +4,6 @@ defpackage geode :
   import collections
   import utils
   import geom
-  import shape
 
 deftype g_any <: Geom
   
@@ -550,12 +549,12 @@ public lostanza defn g-polygon-load (f:ref<String>) -> ref<g-polygon> :
 
 public defmulti mesh (s:Shape) -> g-mesh
 
-public defn Shape (mesh:g-mesh, name:False|Symbol, tags:Tuple<Symbol>, points:Tuple<V3f>) :
+public defn Shape (mesh:g-mesh, name:False|Symbol, color:V4f, tags:Tuple<Symbol>, points:Tuple<V3f>) :
+  val state = AnyShapeState(name, color, tags, points)
   new Shape :
-    defmethod points (this) : points
-    defmethod name (this) : name
+    defmethod state (this) : state
     defmethod tags (this) : tags
-    defmethod shapes (this) : [ this ]
+    defmethod any-shapes (this) : [ this ]
     defmethod mesh (this) : mesh
 
 defmethod print (s:OutputStream, o:Shape) :
@@ -563,13 +562,13 @@ defmethod print (s:OutputStream, o:Shape) :
 
 public defmethod bounds (s:Shape) : to-box3f $ g-mesh-bounds(mesh(s))
 
-public defmethod clone (s:Shape, name:Symbol, points:Tuple<V3f>, tags:Tuple<Symbol>) -> Shape :
-  Shape(mesh(s), name, tags, points)
+public defmethod clone (s:Shape, name:Symbol, color:V4f, points:Tuple<V3f>, tags:Tuple<Symbol>) -> Shape :
+  Shape(mesh(s), name, color, tags, points)
 
-public defn Shape (m:g-mesh) : Shape(m, false, [], [])
+public defn Shape (m:g-mesh) : Shape(m, false, WHITE, [], [])
 
 public defn Shape (s:Shape, bounds:Box3f) :
-  Shape(mesh(s), name(s), tags(s), points(s))
+  Shape(mesh(s), name(s), color(s), tags(s), points(s))
 
 ;;; 3D API
 
@@ -651,9 +650,6 @@ public defn hull (p:g-polygon) -> g-polygon :
 defmethod xyz (mat:Mat44f, p:g-polygon) : 
   g-polygon-mul(to-g-mat(mat), p)
 
-defmethod mov (dp:V3f, s:g-polygon) -> g-polygon :
-  xyz(mov-mat44f(dp), s)
-
 ;;; 2D SUPPORT
 
 public defn xy (s:Shape) -> g-polygon : xy(0.0f, s)
@@ -712,10 +708,3 @@ defmethod spacer (g:Assembly, dims:V3f) : Assembly(BLACK, [ spacer(spacer-empty(
 public defn spacer-x (gdim:Float) : spacer-x(gdim, spacer-empty())
 public defn spacer-y (gdim:Float) : spacer-y(gdim, spacer-empty())
 public defn spacer-z (gdim:Float) : spacer-z(gdim, spacer-empty())
-
-defmethod mov (dp:V3f, s:Shape) -> Shape :
-  xyz(mov-mat44f(dp), s)
-
-defmethod mov (dp:V3f, s:Assembly) -> Assembly :
-  xyz(mov-mat44f(dp), s)
-

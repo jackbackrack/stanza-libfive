@@ -3,7 +3,6 @@ defpackage geode-repl :
    import math
    import collections
    import geom
-   import shape
    import geode
    import sheet
    import glu

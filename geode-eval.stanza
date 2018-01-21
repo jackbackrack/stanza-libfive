@@ -5,7 +5,6 @@ defpackage geode-eval :
    import reader
    import geom
    import eval
-   import shape
    import geode
    import glu
    import font
