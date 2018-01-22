@@ -546,31 +546,35 @@ public defn shear-x-y (h:Float, dx0:Float, dx1:Float, s:Shape) -> Shape :
 ;; TODO : UPDATE BOUNDS
 defn taper-x-y (ymin:Float, ymax:Float, s0:Float, s1:Float, s:Shape) -> Shape :
   defn xf (p) :
-    val sc = lit(ymax - ymin) / ((lit(s1) * (y(p) - lit(ymin))) - (lit(s0) * (y(p) - lit(ymax))))
+    val sc = lit(ymax - ymin) / ((lit(s1) * (y(p) - lit(ymin))) + (lit(s0) * (lit(ymax) - y(p))))
     Vec3Field(x(p) * sc, y(p), z(p))
   with-xyz(id-mat44f(), xf, s)
 
 ;; TODO : UPDATE BOUNDS
 defn taper-xy-z (zmin:Float, zmax:Float, s0:Float, s1:Float, s:Shape) -> Shape :
   defn xf (p) :
-    val sc = lit(zmax - zmin) / ((lit(s1) * (z(p) - lit(zmin))) - (lit(s0) * (z(p) - lit(zmax))))
+    val sc = lit(zmax - zmin) / ((lit(s1) * (z(p) - lit(zmin))) + (lit(s0) * (lit(zmax) - z(p))))
     Vec3Field(x(p) * sc, y(p) * sc, z(p))
   with-xyz(id-mat44f(), xf, s)
 
 public defn taper-xy-z (h:Float, s0:Float, s1:Float, s:Shape) -> Shape :
   taper-xy-z(dim-min(h), dim-max(h), s0, s1, s)
 
-;; TODO : UPDATE BOUNDS
 public defn revolve-y (s:Shape) -> Shape :
-  with-xyz(id-mat44f(), fn (p): Vec3Field(sqrt(sqr(x(p)) + sqr(z(p))), y(p), z(p)), s)
+  val b = bounds(s)
+  val xmx = max(abs(x(lo(b))), abs(x(hi(b))))
+  Shape(with-xyz(id-mat44f(), fn (p): Vec3Field(sqrt(sqr(x(p)) + sqr(z(p))), y(p), z(p)), s),
+        Box3f(V3f((- xmx), y(lo(b)), (- xmx)), V3f(xmx, y(hi(b)), xmx)))
 
 public defn unrevolve-y (s:Shape) -> Shape :
   with-xyz(mag-mat44f(V3f(2.0f * PI-F, 1.0f, 1.0f)), fn (p): Vec3Field(z(p) * cos(x(p)), y(p), z(p) * sin(x(p))), s)
   ;; with-xyz(mag-mat44f(V3f(2.0f * PI-F, 1.0f, 1.0f)), fn (p): Vec3Field(atan2(x(p), z(p)), y(p), sqrt(sqr(x(p)) + sqr(z(p)))), s)
 
-;; TODO : UPDATE BOUNDS
 public defn revolve-x (s:Shape) -> Shape :
-  with-xyz(id-mat44f(), fn (p): Vec3Field(x(p), sqrt(sqr(y(p)) + sqr(z(p))), z(p)), s)
+  val b = bounds(s)
+  val ymx = max(abs(y(lo(b))), abs(y(hi(b))))
+  Shape(with-xyz(id-mat44f(), fn (p): Vec3Field(x(p), sqrt(sqr(y(p)) + sqr(z(p))), z(p)), s),
+        Box3f(V3f(x(lo(b)), (- ymx), (- ymx)), V3f(x(hi(b)), ymx, ymx)))
 
 public defn unrevolve-x (s:Shape) -> Shape :
   with-xyz(mag-mat44f(V3f(1.0f, 2.0f * PI-F, 1.0f)), fn (p): Vec3Field(x(p), z(p) * cos(y(p)), z(p) * sin(y(p))), s)
@@ -766,12 +770,12 @@ public defn capsule2 (d:Float, w:Float) -> Shape :
 public defn capsule (a:V3f, b:V3f, d:Float) -> Shape :
   val v = b - a
   val c = 0.5f * (a + b)
-  mov(c) $ rot(V3f(0.0f, 0.0f, d), v) $ capsule3(d, magnitude(v))
+  mov(c) $ rot(V3f(0.0f, 0.0f, 1.0f), normalize(v)) $ capsule3(d, magnitude(v))
 
 public defn capsule (a:V2f, b:V2f, d:Float) -> Shape :
   val v = b - a
   val c = xyz(0.5f * (a + b))
-  mov(c) $ rot(V2f(d, 0.0f), v) $ capsule2(d, magnitude(v))
+  mov(c) $ rot(V2f(1.0f, 0.0f), normalize(v)) $ capsule2(d, magnitude(v))
 
 ;; public defn capsule2 (a:V3f, b:V3f, d:Float) -> Shape :
 ;;   val r  = 0.5f * d
@@ -812,8 +816,8 @@ defmethod jit-poseable (a:Assembly) -> TreeAssembly :
 
 public defn jit (g:Geom) -> Geom :
   match(g) :
-    (p:Poseable) :  jit-poseable(p)
-    (geom) :        geom
+    (p:Assembly|Shape) :  jit-poseable(p)
+    (geom) :              geom
 
 public var *resolution* = 8.0f
 public var *render-offset* = 16.0f
