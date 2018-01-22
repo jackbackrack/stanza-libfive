@@ -18,5 +18,4 @@ defregistry stanza-ao :
   ;; file "geode-repl.stanza"
   ;; file "eval-geode-repl.stanza" gen :
   ;;   package eval-geode-repl
-  file "shape.stanza"
   file "sheet.stanza"
