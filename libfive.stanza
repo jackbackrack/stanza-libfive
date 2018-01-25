@@ -7,6 +7,13 @@ defpackage libfive :
   import geom
   import grid
 
+public deftype Shape <: AnyShape
+
+public defn shapes (any-shapes:Seqable<AnyShape>) -> Seqable<Shape> :
+  generate<Shape> : for e in any-shapes do : yield(e as Shape) when e is Shape
+
+public defn shapes (p:Poseable) : shapes(any-shapes(p))
+
 lostanza deftype libfive_interval :
   lower : float
   upper : float
