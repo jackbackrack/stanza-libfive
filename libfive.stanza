@@ -84,7 +84,9 @@ extern libfive_tree_unary: (int, ptr<?>) -> ptr<?>
 extern libfive_tree_binary: (int, ptr<?>, ptr<?>) -> ptr<?>
 extern libfive_opcode_enum: (ptr<?>) -> int
 extern libfive_tree_delete: (ptr<?>) -> int
+extern libfive_tree_eval_f_spread: (ptr<?>, float, float, float) -> float
 extern libfive_tree_bounds_star: (ptr<?>) -> ptr<libfive_region3>
+extern libfive_tree_print: (ptr<?>) -> ptr<byte>
 extern libfive_tree_save: (ptr<?>, ptr<byte>) -> int
 extern libfive_tree_save_mesh_spread: (ptr<?>, float, float, float, float, float, float, float, ptr<byte>) -> int
 extern libfive_tree_save_slice_spread: (ptr<?>, float, float, float, float, float, float, ptr<byte>) -> int
@@ -185,8 +187,8 @@ public defn Shape (fabber:(Vec3Field) -> FloField, bounds:Box3f, name:False|Symb
 public defn Shape (fabber:(Vec3Field) -> FloField, bounds:Box3f) :
   Shape(fabber, bounds, false, WHITE, [], [])
 
-defmethod clone (shape:Shape, state:AnyShapeState) -> Shape :
-  Shape(fabber(shape), bounds(shape), state)
+defmethod clone (shape:Shape, name:False|Symbol, color:V4f, points:Tuple<V3f>, tags:Tuple<Symbol>) -> Shape :
+  Shape(fabber(shape), bounds(shape), AnyShapeState(name, color, tags, points))
 
 public defn Shape (s:Shape, bounds:Box3f, name:False|Symbol, color:V4f, tags:Tuple<Symbol>, points:Tuple<V3f>) :
   Shape(fabber(s), bounds, name, color, tags, points)
@@ -230,6 +232,14 @@ public defstruct TreeAssembly <: AnyTree :
 public lostanza defn tree-delete (t:ref<Tree>) -> ref<False> :
   call-c libfive_tree_delete(t.value)
   return false
+
+public lostanza defn tree-eval-f (t:ref<Tree>, p:ref<V3f>) -> ref<Float> :
+  val res = call-c libfive_tree_eval_f_spread(t.value, x(p).value, y(p).value, z(p).value)
+  return new Float{res}
+
+public lostanza defn tree-print (t:ref<Tree>) -> ref<String> :
+  val res = call-c libfive_tree_print(t.value)
+  return String(res)
 
 public lostanza defn tree-save (t:ref<Tree>, filename:ref<String>) -> ref<False> :
   call-c libfive_tree_save(t.value, addr!(filename.chars))
@@ -369,7 +379,7 @@ public defn divide (x:FloField, y:FloField) -> FloField :
   if lit?(x) and lit?(y): lit(divide(lit-value(x), lit-value(y)))
   else if lit?(y, 1.0f): x 
   else if lit?(x, 0.0f): x
-  else : lit(0.0f)
+  else : binary("div", x, y)
 public defn plus (x:FloField, y:FloField) -> FloField :
   if lit?(x) and lit?(y): lit(plus(lit-value(x), lit-value(y)))
   else if lit?(x, 0.0f): y else if lit?(y, 0.0f): x
@@ -412,6 +422,9 @@ public defn negate (x:FloField) -> FloField :
 
 public defn clamp (n:FloField, mn:FloField, mx:FloField) -> FloField :
   min(mx, max(mn, n))
+
+public defn mix (a:FloField, b:FloField, i:FloField) -> FloField :
+  a * i + b * (lit(1.0) - i)
 
 public deftype Vec3Field <: Hashable & Equalable
 public defmulti x (v:Vec3Field) -> FloField
@@ -543,6 +556,53 @@ defn shear-x-y (ymin:Float, ymax:Float, dx0:Float, dx1:Float, s:Shape) -> Shape 
 public defn shear-x-y (h:Float, dx0:Float, dx1:Float, s:Shape) -> Shape :
   shear-x-y(dim-min(h), dim-max(h), dx0, dx1, s)
 
+defstruct Mat22Field :
+  m00 : FloField
+  m01 : FloField
+  m10 : FloField
+  m11 : FloField
+
+defn times (m:Mat22Field, v:Vec2Field) -> Vec2Field :
+  Vec2Field(m00(m) * x(v) + m01(m) * y(v), m10(m) * x(v) + m11(m) * y(v))
+
+public defn twist-z (h:Float, a:Float, shape:Shape) -> Shape :
+  defn xf (p) :
+    val f = degrees-to-radians(a) / h
+    val b = lit(f) * z(p)
+    val c = cos(b)
+    val s = sin(b)
+    val m = Mat22Field(c, (- s), s, c)
+    val v = m * xy(p)
+    fab(shape, Vec3Field(x(v), y(v), z(p)))
+  Shape(xf, bounds(shape))
+
+public defn bend-z (h:Float, a:Float, shape:Shape) -> Shape :
+  defn xf (p) :
+    val f = degrees-to-radians(a) / h
+    val b = lit(f) * y(p)
+    val c = cos(b)
+    val s = sin(b)
+    val m = Mat22Field(c, (- s), s, c)
+    val v = m * xy(p)
+    fab(shape, Vec3Field(x(v), y(v), z(p)))
+  Shape(xf, bounds(shape))
+
+;; TODO: CAN'T GET THIS TO WORK WELL
+public defn bumps (period:Float, shape:Shape) -> Shape :
+  Shape(fn (p):
+          val fac = lit(PI-F / period)
+          val b = sin(fac * x(p)) + sin(fac * y(p)) + sin(fac * z(p))
+          fab(shape, p) + b,
+        bounds(shape))
+
+;; TODO: CAN'T GET THIS TO WORK WELL
+public defn smooth-union (k:Float, a:Shape, b:Shape) -> Shape :
+  Shape(fn (p):
+          val [ar, br] = [fab(a, p), fab(b, p)]
+          val h = clamp(lit(0.5) + lit(0.5) * (br - ar) / lit(k), lit(0.0), lit(1.0))
+          mix(ar, br, h) - lit(k) * h * (lit(1.0) - h)
+        bounds(a) | bounds(b), name(a, b), color(a, b), tags(a, b), points(a, b))
+
 ;; TODO : UPDATE BOUNDS
 defn taper-x-y (ymin:Float, ymax:Float, s0:Float, s1:Float, s:Shape) -> Shape :
   defn xf (p) :
@@ -556,6 +616,14 @@ defn taper-xy-z (zmin:Float, zmax:Float, s0:Float, s1:Float, s:Shape) -> Shape :
     val sc = lit(zmax - zmin) / ((lit(s1) * (z(p) - lit(zmin))) + (lit(s0) * (lit(zmax) - z(p))))
     Vec3Field(x(p) * sc, y(p) * sc, z(p))
   with-xyz(id-mat44f(), xf, s)
+
+public defn loft (zmin:Float, zmax:Float, a:Shape, b:Shape) -> Shape :
+  val xy-bounds = bounds(a) | bounds(b)
+  Shape(fn (p): max(max(z(p) - lit(zmax), lit(zmin) - z(p)),
+                   (((z(p) - lit(zmin)) * fab(b, p)) + ((lit(zmax) - z(p)) * fab(a, p))) / (lit(zmax) - lit(zmin)))
+        Box3f(set-elt(lo(xy-bounds), 2, zmin), set-elt(hi(xy-bounds), 2, zmax)))
+
+public defn loft (h:Float, a:Shape, b:Shape) : loft(dim-min(h), dim-max(h), a, b)
 
 public defn taper-xy-z (h:Float, s0:Float, s1:Float, s:Shape) -> Shape :
   taper-xy-z(dim-min(h), dim-max(h), s0, s1, s)
@@ -603,7 +671,7 @@ public defn extrude (h:Float, shape:Shape) -> Shape :
 
 public defn extrude (h:Float) : extrude{h, _}
 
-public defn bit-or (a:Shape, b:Shape) -> Shape :
+public defmethod bit-or (a:Shape, b:Shape) -> Shape :
   Shape(fn (p): min(fab(a, p), fab(b, p)), bounds(a) | bounds(b), name(a, b), color(a, b), tags(a, b), points(a, b))
 
 public defn intersection (args:Seqable<Shape>) -> Shape :
@@ -622,10 +690,10 @@ public defn offset (s:Shape, o:Float) -> Shape :
   Shape(fn (p): fab(s, p) - lit(o), fatten(bounds(s), xyz(o)), name(s), color(s), tags(s), points(s))
   
 public defn clearance (a:Shape, b:Shape, o:Float) -> Shape :
-  Shape(a & invert(offset(b, (- o))), bounds(a), name(a, b), color(a, b), tags(a, b), points(a))
+  Shape(a & invert(offset(b, o)), bounds(a), name(a, b), color(a, b), tags(a, b), points(a))
   
 public defn shell (s:Shape, o:Float) -> Shape :
-  clearance(s, s, o)
+  clearance(s, s, (- o))
   
 public defn blend (a:Shape, b:Shape, m:Float) -> Shape :
   val joint = a | b
@@ -677,9 +745,9 @@ public defn to-shape (p:Polygon) -> Shape :
 public defn triangle (a:V3f, b:V3f, c:V3f) -> Shape :
   convex([a, b, c])
 
-public defn union (args:Seqable<Shape>) -> Shape :
-  ;; reduce(bit-or, empty(), cat-all(seq(shapes, args)))
-  reduce(bit-or, empty(), args)
+;; public defn union (args:Seqable<Shape>) -> Shape :
+;;   ;; reduce(bit-or, empty(), cat-all(seq(shapes, args)))
+;;   reduce(bit-or, empty(), args)
 
 public defn rem (a:Shape, args:Seqable<Shape>) -> Shape :
   rem(a, union(args))
@@ -688,12 +756,12 @@ public defn rem (shapes:Seqable<Shape>) -> Shape :
   val s = to-seq(shapes)
   rem(next(s), s)
 
-public defn thicken (segments:Seqable<[V3f, V3f]>, f:(V3f, V3f, Float) -> Shape, d:Float) -> Shape :
-  val caps = for [v0, v1] in segments seq : f(v0, v1, d)
+public defn thicken (segments:Seqable<LineSegment3f>, f:(V3f, V3f, Float) -> Shape, d:Float) -> Shape :
+  val caps = for seg in segments seq : f(start(seg), end(seg), d)
   reduce(fn (a:Shape, b:Shape): a | b, caps)
 
-public defn thicken (segments:Seqable<[V2f, V2f]>, f:(V2f, V2f, Float) -> Shape, d:Float) -> Shape :
-  val caps = for [v0, v1] in segments seq : f(v0, v1, d)
+public defn thicken (segments:Seqable<LineSegment2f>, f:(V2f, V2f, Float) -> Shape, d:Float) -> Shape :
+  val caps = for seg in segments seq : f(start(seg), end(seg), d)
   reduce(fn (a:Shape, b:Shape): a | b, caps)
 
 defn extrude (zmin:Float, zmax:Float, shape:Shape) -> Shape :
@@ -704,10 +772,10 @@ defn extrude (zmin:Float, zmax:Float, shape:Shape) -> Shape :
 public defn rect (w:Float, h:Float) -> Shape :
   rect(dim-min(w), dim-min(h), dim-max(w), dim-max(h))
 
-public defn rect (v0:V3f, v1:V3f, d:Float) -> Shape :
+public defn rect (v0:V2f, v1:V2f, d:Float) -> Shape :
   val v = v1 - v0
   val a = atan2(y(v),x(v))
-  mov(0.5f * (v0 + v1), rot-z(radians-to-degrees(a), rect(magnitude(v) + d, d)))
+  mov(xyz(0.5f * (v0 + v1)), rot-z(radians-to-degrees(a), rect(magnitude(v) + d, d)))
 
 public defn square (d:Float) -> Shape :
   rect(d, d)
@@ -759,7 +827,7 @@ public defn round-box (dims:V3f, r:Float) -> Shape :
 ;;     len(pa - h * lit(ba)) - lit(r)
 ;;   Shape(fab, fatten(Box3f(a, a) | Box3f(b, b), r))
 
-public defn capsule3 (d:Float, h:Float, ) -> Shape :
+public defn capsule3 (d:Float, h:Float) -> Shape :
   val r = 0.5f * h
   cylinder(d, h) | mov-z(r, sphere(d)) | mov-z((- r), sphere(d))
 
@@ -768,14 +836,20 @@ public defn capsule2 (d:Float, w:Float) -> Shape :
   rect(w, d) | mov-x(r, circle(d)) | mov-x((- r), circle(d))
 
 public defn capsule (a:V3f, b:V3f, d:Float) -> Shape :
-  val v = b - a
-  val c = 0.5f * (a + b)
-  mov(c) $ rot(V3f(0.0f, 0.0f, 1.0f), normalize(v)) $ capsule3(d, magnitude(v))
+  pose(a, b) $ capsule3(d, magnitude(b - a))
 
 public defn capsule (a:V2f, b:V2f, d:Float) -> Shape :
-  val v = b - a
-  val c = xyz(0.5f * (a + b))
-  mov(c) $ rot(V2f(1.0f, 0.0f), normalize(v)) $ capsule2(d, magnitude(v))
+  pose(a, b) $ capsule2(d, magnitude(b - a))
+
+;; public defn capsule (a:V3f, b:V3f, d:Float) -> Shape :
+;;   val r  = 0.5f * d
+;;   defn fab (p) :
+;;     val pa = p - lit(a)
+;;     val ba = b - a
+;;     val h  = clamp(dot(pa, lit(ba)) / lit(dot(ba, ba)), lit(0.0), lit(1.0))
+;;     len(pa - h * lit(ba)) - lit(r)
+;;     ;; len(pa - h * lit(ba)) - lit(r)
+;;   Shape(fab, fatten(Box3f(a, a) | Box3f(b, b), xyz(r)))
 
 ;; public defn capsule2 (a:V3f, b:V3f, d:Float) -> Shape :
 ;;   val r  = 0.5f * d
@@ -857,6 +931,14 @@ public defn dump (filename:String, s:Shape) -> False :
   val bt = jit(s) as BoundedTree
   tree-save(tree(bt), filename)
 
+public defn eval-f (p:V3f, s:Shape) -> Float :
+  val bt = jit(s) as BoundedTree
+  tree-eval-f(tree(bt), p)
+
+public defn math-string (s:Shape) -> String :
+  val bt = jit(s) as BoundedTree
+  tree-print(tree(bt))
+
 public defn save (z:Float, filename:String, s:Shape) -> False :
   val bt = jit(s) as BoundedTree
   val eps = 1.0f / *resolution*
@@ -892,4 +974,44 @@ defmethod spacer (g:Assembly, dims:V3f) : rgb(BLACK, Assembly([ spacer(empty(), 
 public defn spacer-x (gdim:Float) : spacer-x(gdim, empty())
 public defn spacer-y (gdim:Float) : spacer-y(gdim, empty())
 public defn spacer-z (gdim:Float) : spacer-z(gdim, empty())
+
+;; TODO: LIMITED TO AXIS ALIGNED SHAPES
+public defn smash<?T> (s:?T&Poseable) -> T :
+  val bb    = bounds(s)
+  val dims  = dims(bb)
+  val idx   = min-idx(dims)
+  val ctr   = center(bb)
+  defn rot (s) : if idx == 0 : reflect-xz(s) else if idx == 1 : reflect-yz(s) else : s
+  val res = rot(mov((- ctr), s))
+  ;; println("SMASH %_ (%_ %_) -> %_" % [s bb ctr res])
+  res
+
+defn segment<?T> (shapes:Seqable<?T>, width:T -> Float, max-width:Float, space:Float) -> Seqable<Tuple<T>> :
+  val row = Vector<T>()
+  generate<Tuple<T>> :
+    for pc in shapes do :
+      val off = reduce(f+, join(seq(width, cat(row, [pc])), space))
+      if off > max-width :
+        yield(to-tuple $ row)
+        println("OFF %_ > %_" % [off max-width])
+        clear(row)
+      println("ADD ROW")
+      add(row, pc)
+    if length(row) > 0 : yield(to-tuple $ row)
+
+public defn nest (pcs:Seqable<Poseable>, size:V2f, space:Float) -> Seqable<Assembly> :
+  val apcs  = to-tuple $ pcs
+  println("NEST A %_" % [apcs])
+  val rpcs  = to-tuple $ seq(fn (pc): reflect-xy(pc) when max-idx(dims(bounds(pc))) != max-idx(size) else pc, apcs)
+  println("NEST R %_" % [rpcs])
+  val spcs  = to-tuple $ lazy-qsort({ y(dims(bounds(_))) }, rpcs)
+  println("NEST S %_" % [spcs])
+  val rows  = to-tuple $ segment(spcs, { x(dims(bounds(_))) }, x(size), space)
+  println("NEST ROWS %_" % [rows])
+  val pages = segment(rows, { y(dims(bounds(union(shapes $ Assembly $ _)))) }, y(size), space)
+  val res = to-tuple $ for page in pages seq :
+    val rrows = for row in page seq: Assembly(stack-x(join(row, spacer-x(space))))
+    Assembly(stack-y(join(rrows, Assembly([ spacer-y(space) ]))))
+  println("NEST RES %_" % [res])
+  res
 

@@ -408,46 +408,6 @@ public defn quilt (shape:Shape, stock-dims:V3f, parity:Int) -> Seqable<Shape> :
 public defn join-pieces (elts:Seqable<Shape>, get-teeth:Box3f -> Shape) :
   join-pieces(elts, get-teeth, get-teeth, [], [])
 
-;; TODO: LIMITED TO AXIS ALIGNED SHAPES
-public defn smash<?T> (s:?T&Poseable) -> T :
-  val bb    = bounds(s)
-  val dims  = dims(bb)
-  val idx   = min-idx(dims)
-  val ctr   = center(bb)
-  defn rot (s) : if idx == 0 : reflect-xz(s) else if idx == 1 : reflect-yz(s) else : s
-  val res = rot(mov((- ctr), s))
-  ;; println("SMASH %_ (%_ %_) -> %_" % [s bb ctr res])
-  res
-
-defn segment<?T> (shapes:Seqable<?T>, width:T -> Float, max-width:Float, space:Float) -> Seqable<Tuple<T>> :
-  val row = Vector<T>()
-  generate<Tuple<T>> :
-    for pc in shapes do :
-      val off = reduce(f+, join(seq(width, cat(row, [pc])), space))
-      if off > max-width :
-        yield(to-tuple $ row)
-        println("OFF %_ > %_" % [off max-width])
-        clear(row)
-      println("ADD ROW")
-      add(row, pc)
-    if length(row) > 0 : yield(to-tuple $ row)
-
-public defn nest (pcs:Seqable<Poseable>, size:V2f, space:Float) -> Seqable<Assembly> :
-  val apcs  = to-tuple $ pcs
-  println("NEST A %_" % [apcs])
-  val rpcs  = to-tuple $ seq(fn (pc): reflect-xy(pc) when max-idx(dims(bounds(pc))) != max-idx(size) else pc, apcs)
-  println("NEST R %_" % [rpcs])
-  val spcs  = to-tuple $ lazy-qsort({ y(dims(bounds(_))) }, rpcs)
-  println("NEST S %_" % [spcs])
-  val rows  = to-tuple $ segment(spcs, { x(dims(bounds(_))) }, x(size), space)
-  println("NEST ROWS %_" % [rows])
-  val pages = segment(rows, { y(dims(bounds(union(shapes $ Assembly $ _)))) }, y(size), space)
-  val res = to-tuple $ for page in pages seq :
-    val rrows = for row in page seq: Assembly(stack-x(join(row, spacer-x(space))))
-    Assembly(stack-y(join(rrows, Assembly([ spacer-y(space) ]))))
-  println("NEST RES %_" % [res])
-  res
-
 defn num-to-bits (num:Int) -> Tuple<Int> :
   to-tuple $ for i in 2 through 0 by -1 seq : (num >> i) & 1
 
@@ -598,8 +558,6 @@ public defn sliced (pcs:Tuple<Shape>, c:Config) :
     val parts = union $ shapes $ page
     println-all(["  " dims(bounds(parts))])
     slice(0.0f, parts)
-
-public defn group (elts:Seqable<Poseable>) : Assembly(elts)
 
 public defn svgd (c:Config, res:Results) :
   for (slice in sliced(pcs(res), c), i in 0 to false) do :

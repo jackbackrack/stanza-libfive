@@ -13,6 +13,11 @@ using namespace Kernel;
 
 extern "C" {
 
+float libfive_tree_eval_f_spread(libfive_tree tree, float x, float y, float z) {
+  libfive_vec3 p = {x, y, z};
+  return libfive_tree_eval_f(tree, p);
+}
+
 bool libfive_tree_save_mesh_spread(libfive_tree tree, float lx, float ux, float ly, float uy, float lz, float uz,
                                    float res, const char* f);
  

@@ -10,3 +10,4 @@ defpackage libfive-repl :
    import utils
    import grid
    import nester
+   import reader
