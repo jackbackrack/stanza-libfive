@@ -897,8 +897,11 @@ defmethod jit-poseable (a:Assembly) -> TreeAssembly :
 
 public defn jit (g:Geom) -> Geom :
   match(g) :
-    (p:Assembly|Shape) :  jit-poseable(p)
-    (geom) :              geom
+    (p:Shape) : jit-poseable(p)
+    (p:Assembly) :
+      val cs = children(p)
+      jit-poseable(p) when (length(cs) == 0 or cs[0] is Shape) else p
+    (geom) : geom
 
 public var *max-bounds* = dims-to-box $ xyz(1000.0f)
 public var *resolution* = 8.0f
