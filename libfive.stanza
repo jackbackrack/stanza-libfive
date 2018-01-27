@@ -903,36 +903,40 @@ public defn jit (g:Geom) -> Geom :
       jit-poseable(p) when (length(cs) == 0 or cs[0] is Shape) else p
     (geom) : geom
 
-public var *max-bounds* = dims-to-box $ xyz(1000.0f)
-public var *resolution* = 8.0f
-public var *render-offset* = 16.0f
-
+public var *resolution* = 1.0f / 8.0f
+public defn divisions () : 1.0f / *resolution* 
 public defn set-resolution (r:Float) : *resolution* = r
-public defn set-bounds (b:Box3f) : *max-bounds* = b
+
+public var *max-bounds*:False|Box3f = false
+public defn max-bounds () :
+  default<Box3f>(*max-bounds*, dims-to-box $ xyz(*resolution* * 1000.0f))
+public defn set-max-bounds (b:Box3f) : *max-bounds* = b
+
+public var *render-offset* = 16.0f
 
 public defn slice (z:Float, s:Shape) -> Polygon :
   val bt = jit(s) as BoundedTree
-  val eps = *render-offset* ;; 1.0f / *resolution*
+  val eps = *render-offset* ;; *resolution*
   val bds = Box3f(xyz(xy(lo(bounds(s)))) + V3f((- eps), (- eps), z), xyz(xy(hi(bounds(s)))) + V3f(eps, eps, z))
   val start = current-time-ms()
-  val poly = tree-render-slice(tree(bt), bds & *max-bounds*, *resolution*)
+  val poly = tree-render-slice(tree(bt), bds & max-bounds(), divisions())
   ;; println-all(["RENDER-SLICE = " to-float(current-time-ms() - start) * 0.001f])
   poly
 
 public defn pixels (z:Float, s:Shape) -> Pixels :
   ;; println-all(["RENDER-PIXELS-START " bounds(s)])
   val bt = jit(s) as BoundedTree
-  ;; val eps = *render-offset* ;; 1.0f / *resolution*
-  val eps = 1.0f / *resolution*
+  ;; val eps = *render-offset* ;; *resolution*
+  val eps = *resolution*
   val bds = Box3f(xyz(xy(lo(bounds(s)))) + V3f((- eps), (- eps), z), xyz(xy(hi(bounds(s)))) + V3f(eps, eps, z))
   val start = current-time-ms()
-  val pixels = tree-render-pixels(tree(bt), bds & *max-bounds*, *resolution*)
+  val pixels = tree-render-pixels(tree(bt), bds & max-bounds(), divisions())
   ;; println-all(["RENDER-PIXELS = " to-float(current-time-ms() - start) * 0.001f])
   pixels
 
 ;; public defn pixels (z:Float, s:Shape) -> Pixels :
 ;;   val poly = slice(z, s)
-;;   val dim = 1.0f / *resolution*
+;;   val dim = *resolution*
 ;;   val gdims = xyz(xy(to-v3i(round(dims(bounds(s)) / dim)))) + V3i(0, 0, 1)
 ;;   println("GRID DIM %_ BOUNDS %_ DIMS %_ GDIMS %_" % [dim bounds(s) dims(bounds(s)) gdims])
 ;;   val grid = Grid(gdims, dim)
@@ -953,18 +957,18 @@ public defn math-string (s:Shape) -> String :
 
 public defn save (z:Float, filename:String, s:Shape) -> False :
   val bt = jit(s) as BoundedTree
-  val eps = 1.0f / *resolution*
-  tree-save-slice(tree(bt), filename, fatten(bounds(s), xyz(eps)) & *max-bounds*, *resolution*)
+  val eps = *resolution*
+  tree-save-slice(tree(bt), filename, fatten(bounds(s), xyz(eps)) & max-bounds(), divisions())
 
 public defn save (filename:String, s:Shape) -> False :
   val bt = jit(s) as BoundedTree
-  val eps = 1.0f / *resolution*
-  tree-save-mesh(tree(bt), filename, fatten(bounds(s), xyz(eps)) & *max-bounds*, *resolution*)
+  val eps = *resolution*
+  tree-save-mesh(tree(bt), filename, fatten(bounds(s), xyz(eps)) & max-bounds(), divisions())
 
 public defn empty? (s:Shape) -> True|False :
   val bt = jit(s) as BoundedTree
   val bounds = tree-bounds(tree(bt))
-  empty?(bounds) or empty?(vertices(tree-render-mesh(tree(bt), bounds & *max-bounds*, *resolution*)))
+  empty?(bounds) or empty?(vertices(tree-render-mesh(tree(bt), bounds & max-bounds(), divisions())))
 
 public defn empty2? (s:Shape) -> True|False :
   val bt = jit(s) as BoundedTree
