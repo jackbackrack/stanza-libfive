@@ -23,7 +23,7 @@ defmethod render (bt:BoundedTree) -> False :
     val res = tree-render-mesh(tree(bt), bds, divisions())
     val mesh-time = current-time-ms()
     println-all(["MESH-" num " " dims(bds) " RENDER " to-float(mesh-time - start-time) * 0.001f " SECS"])
-    res
+    rgb(color(shape(bt)), res)
   else :
     mesh(bt) as Mesh
   set-mesh(bt, mesh)
@@ -38,10 +38,7 @@ defmethod render (bt:BoundedTree) -> False :
     draw-text(x(size), y(size), *font*, to-string(name(bt)))
     gl-pop-attrib()
     gl-pop-matrix()
-  gl-push-attrib(GL-CURRENT-BIT)
-  gl-color4(color(shape(bt)))
   render(mesh)
-  gl-pop-attrib()
   ;; tree-delete(tree(bt))
   ;; gl-push-attrib(GL-CURRENT-BIT)
   ;; gl-color3f(1.0f, 0.5f, 0.5f)

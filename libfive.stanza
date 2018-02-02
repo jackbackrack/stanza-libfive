@@ -919,7 +919,7 @@ public defn slice (z:Float, s:Shape) -> Polygon :
   val eps = *render-offset* ;; *resolution*
   val bds = Box3f(xyz(xy(lo(bounds(s)))) + V3f((- eps), (- eps), z), xyz(xy(hi(bounds(s)))) + V3f(eps, eps, z))
   val start = current-time-ms()
-  val poly = tree-render-slice(tree(bt), bds & max-bounds(), divisions())
+  val poly = rgb(color(s), tree-render-slice(tree(bt), bds & max-bounds(), divisions()))
   ;; println-all(["RENDER-SLICE = " to-float(current-time-ms() - start) * 0.001f])
   poly
 
