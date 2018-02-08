@@ -843,10 +843,10 @@ public defn capsule2 (d:Float, w:Float) -> Shape :
   rect(w, d) | mov-x(r, circle(d)) | mov-x((- r), circle(d))
 
 public defn capsule (a:V3f, b:V3f, d:Float) -> Shape :
-  pose(a, b) $ capsule3(d, magnitude(b - a))
+  pose-to-points(a, b) $ capsule3(d, magnitude(b - a))
 
 public defn capsule (a:V2f, b:V2f, d:Float) -> Shape :
-  pose(a, b) $ capsule2(d, magnitude(b - a))
+  pose-to-points(a, b) $ capsule2(d, magnitude(b - a))
 
 ;; public defn capsule (a:V3f, b:V3f, d:Float) -> Shape :
 ;;   val r  = 0.5f * d
