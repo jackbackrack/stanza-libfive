@@ -9,5 +9,6 @@ defpackage libfive-repl :
    import font
    import utils
    import grid
+   import clipper
    import nester
    import reader
