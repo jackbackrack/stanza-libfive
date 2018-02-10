@@ -505,7 +505,7 @@ public defn nested (pcs:Tuple<Shape>, c:Config) :
   println("NESTED %_" % [pcs])
   val spcs = pcs[0 to (length(pcs) - num-extras(c))]
   val npcs = cat-all $ for i in 0 to n(c) seq : spcs 
-  nest(seq(smash{ group $ [_] }, npcs), stock-dims(c), 0.25f)
+  nest(seq(smash{ group $ [_] }, npcs), stock-dims(c), spacer{empty(), _}, 0.25f)
 
 public defn explode (elt:Poseable, a:Float) :
   val ctr = center(bounds(elt))

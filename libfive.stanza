@@ -912,8 +912,7 @@ public defn jit (g:Geom) -> Geom :
       jit-poseable(p) when (length(cs) == 0 or cs[0] is Shape) else p
     (geom) : geom
 
-public var *resolution* = 1.0f / 8.0f
-public defn divisions () : 1.0f / *resolution* 
+public var *resolution* = 8.0f
 public defn set-resolution (r:Float) : *resolution* = r
 
 public var *max-bounds*:False|Box3f = false
@@ -928,7 +927,7 @@ public defn slice (z:Float, s:Shape) -> Polygon :
   val eps = *render-offset* ;; *resolution*
   val bds = Box3f(xyz(xy(lo(bounds(s)))) + V3f((- eps), (- eps), z), xyz(xy(hi(bounds(s)))) + V3f(eps, eps, z))
   val start = current-time-ms()
-  val poly = rgb(color(s), tree-render-slice(tree(bt), bds & max-bounds(), divisions()))
+  val poly = rgb(color(s), tree-render-slice(tree(bt), bds & max-bounds(), *resolution*))
   ;; println-all(["RENDER-SLICE = " to-float(current-time-ms() - start) * 0.001f])
   poly
 
@@ -939,7 +938,7 @@ public defn pixels (z:Float, s:Shape) -> Pixels :
   val eps = *resolution*
   val bds = Box3f(xyz(xy(lo(bounds(s)))) + V3f((- eps), (- eps), z), xyz(xy(hi(bounds(s)))) + V3f(eps, eps, z))
   val start = current-time-ms()
-  val pixels = tree-render-pixels(tree(bt), bds & max-bounds(), divisions())
+  val pixels = tree-render-pixels(tree(bt), bds & max-bounds(), *resolution*)
   ;; println-all(["RENDER-PIXELS = " to-float(current-time-ms() - start) * 0.001f])
   pixels
 
@@ -967,17 +966,17 @@ public defn math-string (s:Shape) -> String :
 public defn save (z:Float, filename:String, s:Shape) -> False :
   val bt = jit(s) as BoundedTree
   val eps = *resolution*
-  tree-save-slice(tree(bt), filename, fatten(bounds(s), xyz(eps)) & max-bounds(), divisions())
+  tree-save-slice(tree(bt), filename, fatten(bounds(s), xyz(eps)) & max-bounds(), *resolution*)
 
 public defn save (filename:String, s:Shape) -> False :
   val bt = jit(s) as BoundedTree
   val eps = *resolution*
-  tree-save-mesh(tree(bt), filename, fatten(bounds(s), xyz(eps)) & max-bounds(), divisions())
+  tree-save-mesh(tree(bt), filename, fatten(bounds(s), xyz(eps)) & max-bounds(), *resolution*)
 
 public defn empty? (s:Shape) -> True|False :
   val bt = jit(s) as BoundedTree
   val bounds = tree-bounds(tree(bt))
-  empty?(bounds) or empty?(vertices(tree-render-mesh(tree(bt), bounds & max-bounds(), divisions())))
+  empty?(bounds) or empty?(vertices(tree-render-mesh(tree(bt), bounds & max-bounds(), *resolution*)))
 
 public defn empty2? (s:Shape) -> True|False :
   val bt = jit(s) as BoundedTree
@@ -1011,43 +1010,4 @@ public defn spacer-x (gdim:Float) : spacer-x(gdim, empty())
 public defn spacer-y (gdim:Float) : spacer-y(gdim, empty())
 public defn spacer-z (gdim:Float) : spacer-z(gdim, empty())
 
-;; TODO: LIMITED TO AXIS ALIGNED SHAPES
-public defn smash<?T> (s:?T&Poseable) -> T :
-  val bb    = bounds(s)
-  val dims  = dims(bb)
-  val idx   = min-idx(dims)
-  val ctr   = center(bb)
-  defn rot (s) : if idx == 0 : reflect-xz(s) else if idx == 1 : reflect-yz(s) else : s
-  val res = rot(mov((- ctr), s))
-  ;; println("SMASH %_ (%_ %_) -> %_" % [s bb ctr res])
-  res
-
-defn segment<?T> (shapes:Seqable<?T>, width:T -> Float, max-width:Float, space:Float) -> Seqable<Tuple<T>> :
-  val row = Vector<T>()
-  generate<Tuple<T>> :
-    for pc in shapes do :
-      val off = reduce(f+, join(seq(width, cat(row, [pc])), space))
-      if off > max-width :
-        yield(to-tuple $ row)
-        println("OFF %_ > %_" % [off max-width])
-        clear(row)
-      println("ADD ROW")
-      add(row, pc)
-    if length(row) > 0 : yield(to-tuple $ row)
-
-public defn nest (pcs:Seqable<Poseable>, size:V2f, space:Float) -> Seqable<Assembly> :
-  val apcs  = to-tuple $ pcs
-  println("NEST A %_" % [apcs])
-  val rpcs  = to-tuple $ seq(fn (pc): reflect-xy(pc) when max-idx(dims(bounds(pc))) != max-idx(size) else pc, apcs)
-  println("NEST R %_" % [rpcs])
-  val spcs  = to-tuple $ lazy-qsort({ y(dims(bounds(_))) }, rpcs)
-  println("NEST S %_" % [spcs])
-  val rows  = to-tuple $ segment(spcs, { x(dims(bounds(_))) }, x(size), space)
-  println("NEST ROWS %_" % [rows])
-  val pages = segment(rows, { y(dims(bounds(union(shapes $ Assembly $ _)))) }, y(size), space)
-  val res = to-tuple $ for page in pages seq :
-    val rrows = for row in page seq: Assembly(stack-x(join(row, spacer-x(space))))
-    Assembly(stack-y(join(rrows, Assembly([ spacer-y(space) ]))))
-  println("NEST RES %_" % [res])
-  res
 
