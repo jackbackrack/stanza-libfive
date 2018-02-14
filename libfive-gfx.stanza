@@ -40,12 +40,12 @@ defmethod render (bt:BoundedTree) -> False :
     gl-pop-matrix()
   render(mesh)
   ;; tree-delete(tree(bt))
-  ;; gl-push-attrib(GL-CURRENT-BIT)
-  ;; gl-color3f(1.0f, 0.5f, 0.5f)
-  ;; gl-point-size(10.0f)
-  ;; for point in points(tree) do :
-  ;;   render(point)
-  ;; gl-pop-attrib()
+  gl-push-attrib(GL-CURRENT-BIT)
+  gl-color3f(1.0f, 0.5f, 0.5f)
+  gl-point-size(20.0f)
+  for point in points(shape(bt)) do :
+    render(point)
+  gl-pop-attrib()
 
 defmethod render (lay:TreeAssembly) -> False :
   gl-push-matrix()

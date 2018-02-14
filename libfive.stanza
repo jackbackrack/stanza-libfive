@@ -7,6 +7,9 @@ defpackage libfive :
   import geom
   import grid
 
+val @doc-libfive = "## LIBFIVE -- distance fields"
+
+val @doc-shape = "SHAPE -- a libfive object represented by a distance field"
 public deftype Shape <: AnyShape
 
 public defn shapes (any-shapes:Seqable<AnyShape>) -> Seqable<Shape> :
@@ -194,8 +197,8 @@ public defn Shape (fabber:(Vec3Field) -> FloField, bounds:Box3f, name:False|Symb
 public defn Shape (fabber:(Vec3Field) -> FloField, bounds:Box3f) :
   Shape(fabber, bounds, false, WHITE, [], [])
 
-defmethod clone (shape:Shape, name:False|Symbol, color:V4f, points:Tuple<V3f>, tags:Tuple<Symbol>) -> Shape :
-  Shape(fabber(shape), bounds(shape), AnyShapeState(name, color, tags, points))
+defmethod clone (shape:Shape, state:AnyShapeState) -> Shape :
+  Shape(fabber(shape), bounds(shape), state)
 
 public defn Shape (s:Shape, bounds:Box3f, name:False|Symbol, color:V4f, tags:Tuple<Symbol>, points:Tuple<V3f>) :
   Shape(fabber(s), bounds, name, color, tags, points)
@@ -972,6 +975,11 @@ public defn save (filename:String, s:Shape) -> False :
   val bt = jit(s) as BoundedTree
   val eps = *resolution*
   tree-save-mesh(tree(bt), filename, fatten(bounds(s), xyz(eps)) & max-bounds(), *resolution*)
+
+public defn to-mesh (s:Shape) -> Mesh :
+  val bt = jit(s) as BoundedTree
+  val eps = *resolution*
+  rgb(color(s), tree-render-mesh(tree(bt), fatten(bounds(s), xyz(eps)) & max-bounds(), *resolution*))
 
 public defn empty? (s:Shape) -> True|False :
   val bt = jit(s) as BoundedTree
