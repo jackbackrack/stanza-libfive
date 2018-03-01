@@ -20,6 +20,9 @@ defmethod render (poly:g-nested-v3d) -> False :
 defmethod render (poly:g-nested-v2d) -> False :
   render(to-polyline2f(poly))
 
+defmethod render (arcs:g-nested-circle-arc) -> False :
+  render(to-polygon(arcs, 1.0f / *resolution*))
+
 defmethod render (mesh:g-mesh) -> False :
   render(to-mesh(mesh))
 
@@ -35,12 +38,3 @@ defmethod render (s:Shape) -> False :
     gl-pop-attrib()
     gl-pop-matrix()
   render(mesh(s))
-
-defmethod render (s:Assembly) -> False :
-  gl-push-matrix()
-  gl-mult-matrix(mat(s))
-  gl-push-attrib(GL-CURRENT-BIT)
-  gl-color4(color(s))
-  do(render, children(s))
-  gl-pop-attrib()
-  gl-pop-matrix()

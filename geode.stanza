@@ -5,6 +5,13 @@ defpackage geode :
   import utils
   import geom
 
+public deftype Shape <: AnyShape
+
+public defn shapes (any-shapes:Seqable<AnyShape>) -> Seqable<Shape> :
+  generate<Shape> : for e in any-shapes do : yield(e as Shape) when e is Shape
+
+public defn shapes (p:Poseable) : shapes(any-shapes(p))
+
 deftype g_any <: Geom
   
 lostanza deftype g_args :
@@ -29,6 +36,15 @@ lostanza deftype g_v3d :
 
 public lostanza deftype g-v3d <: g_any :
   value: ptr<g_v3d>
+  
+lostanza deftype g_circle_arc :
+  kind : int
+  x : double
+  y : double
+  q : double
+
+public lostanza deftype g-circle-arc <: g_any :
+  value: ptr<g_circle_arc>
   
 lostanza deftype g_v3i :
   kind : int
@@ -94,6 +110,15 @@ public lostanza deftype g-array-v3d <: g_any :
 defmethod print (s:OutputStream, o:g-array-v3d) :
   print-all(s, ["G-Array-V3d()"])
 
+lostanza deftype g_array_circle_arc :
+  kind : int
+
+public lostanza deftype g-array-circle-arc <: g_any :
+  value: ptr<g_array_circle_arc>
+
+defmethod print (s:OutputStream, o:g-array-circle-arc) :
+  print-all(s, ["G-Array-Circle-Arc()"])
+
 lostanza deftype g_nested_v2d :
   kind : int
 
@@ -111,6 +136,15 @@ public lostanza deftype g-nested-v3d <: g_any :
 
 defmethod print (s:OutputStream, o:g-nested-v3d) :
   print-all(s, ["G-Nested-V3d()"])
+
+lostanza deftype g_nested_circle_arc :
+  kind : int
+
+public lostanza deftype g-nested-circle-arc <: g_any :
+  value: ptr<g_nested_circle_arc>
+
+defmethod print (s:OutputStream, o:g-nested-circle-arc) :
+  print-all(s, ["G-Nested-Circle-Arc()"])
 
 lostanza deftype g_mesh :
   kind : int
@@ -136,6 +170,7 @@ extern g_args_add: (ptr<g_args>, ptr<?>) -> ptr<g_args>
 extern g_v2d_fab: (float, float) -> ptr<g_v2d>
 extern g_v3d_fab: (float, float, float) -> ptr<g_v3d>
 extern g_v3i_fab: (int, int, int) -> ptr<g_v3i>
+extern g_circle_arc_fab: (float, float, float) -> ptr<g_circle_arc>
 
 extern g_mat_fab: (float, float, float, float, float, float, float, float,
                    float, float, float, float, float, float, float, float) -> ptr<g_mat>
@@ -153,6 +188,10 @@ extern g_array_v3i_fab: (ptr<g_args>) -> ptr<g_array_v3i>
 extern g_array_v3i_elt: (ptr<g_array_v3i>, int) -> ptr<g_v3i>
 extern g_array_v3i_len: (ptr<g_array_v3i>) -> int
 
+extern g_array_circle_arc_fab: (ptr<g_args>) -> ptr<g_array_circle_arc>
+extern g_array_circle_arc_elt: (ptr<g_array_circle_arc>, int) -> ptr<g_circle_arc>
+extern g_array_circle_arc_len: (ptr<g_array_circle_arc>) -> int
+
 extern g_bbox2_min: (ptr<g_array_v2d>) -> ptr<g_v2d>
 extern g_bbox2_max: (ptr<g_array_v2d>) -> ptr<g_v2d>
 
@@ -166,6 +205,10 @@ extern g_nested_v2d_len: (ptr<g_nested_v2d>) -> int
 extern g_nested_v3d_fab: (ptr<g_args>) -> ptr<g_nested_v3d>
 extern g_nested_v3d_elt: (ptr<g_nested_v3d>, int) -> ptr<g_array_v3d>
 extern g_nested_v3d_len: (ptr<g_nested_v3d>) -> int
+
+extern g_nested_circle_arc_fab: (ptr<g_args>) -> ptr<g_nested_circle_arc>
+extern g_nested_circle_arc_elt: (ptr<g_nested_circle_arc>, int) -> ptr<g_array_circle_arc>
+extern g_nested_circle_arc_len: (ptr<g_nested_circle_arc>) -> int
 
 extern g_polygon_fab: (ptr<g_args>) -> ptr<g_polygon>
 extern g_polygon_elt: (ptr<g_polygon>, int) -> ptr<g_array_v2d>
@@ -196,6 +239,17 @@ extern g_mesh_hull: (ptr<g_mesh>) -> ptr<g_mesh>
 extern g_mesh_extrude: (float, ptr<g_polygon>) -> ptr<g_mesh>
 extern g_mesh_save: (ptr<byte>, ptr<g_mesh>) -> ptr<g_mesh>
 extern g_mesh_load: (ptr<byte>) -> ptr<g_mesh>
+
+extern g_nested_circle_arc_concat: (ptr<g_nested_circle_arc>, ptr<g_nested_circle_arc>) -> ptr<g_nested_circle_arc>
+extern g_nested_circle_arc_find_overlapping_offsets: (float, ptr<g_nested_circle_arc>) -> ptr<g_nested_circle_arc>
+extern g_nested_circle_arc_discretize: (float, int, ptr<g_nested_circle_arc>) -> ptr<g_nested_v2d>
+extern g_nested_circle_arc_open_offset: (ptr<g_nested_circle_arc>, float) -> ptr<g_nested_circle_arc>
+extern g_nested_circle_arc_closed_offset: (ptr<g_nested_circle_arc>, float) -> ptr<g_nested_circle_arc>
+extern g_nested_circle_arc_union: (ptr<g_nested_circle_arc>, ptr<g_nested_circle_arc>) -> ptr<g_nested_circle_arc>
+extern g_nested_circle_arc_intersection: (ptr<g_nested_circle_arc>, ptr<g_nested_circle_arc>) -> ptr<g_nested_circle_arc>
+extern g_nested_circle_arc_intersection1: (ptr<g_nested_circle_arc>) -> ptr<g_nested_circle_arc>
+extern g_nested_circle_arc_difference: (ptr<g_nested_circle_arc>, ptr<g_nested_circle_arc>) -> ptr<g_nested_circle_arc>
+extern g_nested_circle_arc_not: (ptr<g_nested_circle_arc>) -> ptr<g_nested_circle_arc>
 
 extern g_polygon_circle: (float) -> ptr<g_polygon>
 extern g_polygon_square: (float) -> ptr<g_polygon>
@@ -248,11 +302,17 @@ public lostanza defn to-v3f (v:ref<g-v3d>) -> ref<V3f> :
 public lostanza defn to-v2f (v:ref<g-v2d>) -> ref<V2f> :
   return new V2f{v.value.x as float, v.value.y as float}
 
+public lostanza defn to-v2f (v:ref<g-circle-arc>) -> ref<V2f> :
+  return new V2f{v.value.x as float, v.value.y as float}
+
 public lostanza defn to-g-v3i (v:ref<V3i>) -> ref<g-v3i> :
   return new g-v3i{call-c g_v3i_fab(x(v).value, y(v).value, z(v).value)}
 
 public lostanza defn to-g-v3d (v:ref<V3f>) -> ref<g-v3d> :
   return new g-v3d{call-c g_v3d_fab(x(v).value, y(v).value, z(v).value)}
+
+public lostanza defn to-g-circle-arc (v:ref<V2f>) -> ref<g-circle-arc> :
+  return new g-circle-arc{call-c g_circle_arc_fab(x(v).value, y(v).value, 0.0f)}
 
 public lostanza defn to-g-v2d (v:ref<V2f>) -> ref<g-v2d> :
   return new g-v2d{call-c g_v2d_fab(x(v).value, y(v).value)}
@@ -262,6 +322,12 @@ public lostanza defn g-array-v3d-len (a:ref<g-array-v3d>) -> ref<Int> :
 
 public lostanza defn g-array-v3d-elt (a:ref<g-array-v3d>, i:ref<Int>) -> ref<g-v3d> :
   return new g-v3d{call-c g_array_v3d_elt(a.value, i.value)}
+
+public lostanza defn g-array-circle-arc-len (a:ref<g-array-circle-arc>) -> ref<Int> :
+  return new Int{call-c g_array_circle_arc_len(a.value)}
+
+public lostanza defn g-array-circle-arc-elt (a:ref<g-array-circle-arc>, i:ref<Int>) -> ref<g-circle-arc> :
+  return new g-circle-arc{call-c g_array_circle_arc_elt(a.value, i.value)}
 
 public lostanza defn g-array-v2d-len (a:ref<g-array-v2d>) -> ref<Int> :
   return new Int{call-c g_array_v2d_len(a.value)}
@@ -286,6 +352,12 @@ public lostanza defn g-nested-v2d-len (a:ref<g-nested-v2d>) -> ref<Int> :
 
 public lostanza defn g-nested-v2d-elt (a:ref<g-nested-v2d>, i:ref<Int>) -> ref<g-array-v2d> :
   return new g-array-v2d{call-c g_nested_v2d_elt(a.value, i.value)}
+
+public lostanza defn g-nested-circle-arc-len (a:ref<g-nested-circle-arc>) -> ref<Int> :
+  return new Int{call-c g_nested_circle_arc_len(a.value)}
+
+public lostanza defn g-nested-circle-arc-elt (a:ref<g-nested-circle-arc>, i:ref<Int>) -> ref<g-array-circle-arc> :
+  return new g-array-circle-arc{call-c g_nested_circle_arc_elt(a.value, i.value)}
 
 public lostanza defn g-polygon-len (a:ref<g-polygon>) -> ref<Int> :
   return new Int{call-c g_polygon_len(a.value)}
@@ -337,6 +409,12 @@ public lostanza defn to-g-array-v3d (v:ref<Tuple<V3f>>) -> ref<g-array-v3d> :
     call-c g_args_add(args, to-g-v3d(get(v, new Int{i})).value)
   return new g-array-v3d{call-c g_array_v3d_fab(args)}
 
+public lostanza defn to-g-array-circle-arc (v:ref<Tuple<V2f>>) -> ref<g-array-circle-arc> :
+  val args = call-c g_args_fab()
+  for (var i:int = 0, i < length(v).value, i = i + 1) :
+    call-c g_args_add(args, to-g-circle-arc(get(v, new Int{i})).value)
+  return new g-array-circle-arc{call-c g_array_circle_arc_fab(args)}
+
 public lostanza defn to-g-array-v3i (v:ref<Tuple<V3i>>) -> ref<g-array-v3i> :
   val args = call-c g_args_fab()
   for (var i:int = 0, i < length(v).value, i = i + 1) :
@@ -347,7 +425,7 @@ public lostanza defn to-g-polygon (v:ref<Polygon>) -> ref<g-polygon> :
   val args = call-c g_args_fab()
   val contours = contours(v)
   for (var i:int = 0, i < length(contours).value, i = i + 1) :
-    call-c g_args_add(args, to-g-array-v2d(points(get(contours, new Int{i}))).value)
+    call-c g_args_add(args, to-g-array-v2d(vertices(get(contours, new Int{i}))).value)
   return new g-polygon{call-c g_polygon_fab(args)}
 
 public lostanza defn to-g-nested-v3d (v:ref<PolyLine3f>) -> ref<g-nested-v3d> :
@@ -364,6 +442,13 @@ public lostanza defn to-g-nested-v2d (v:ref<PolyLine2f>) -> ref<g-nested-v2d> :
     call-c g_args_add(args, to-g-array-v2d(get(strokes, new Int{i})).value)
   return new g-nested-v2d{call-c g_nested_v2d_fab(args)}
 
+public lostanza defn to-g-nested-circle-arc (v:ref<PolyLine2f>) -> ref<g-nested-circle-arc> :
+  val args = call-c g_args_fab()
+  val strokes = strokes(v)
+  for (var i:int = 0, i < length(strokes).value, i = i + 1) :
+    call-c g_args_add(args, to-g-array-circle-arc(get(strokes, new Int{i})).value)
+  return new g-nested-circle-arc{call-c g_nested_circle_arc_fab(args)}
+
 public lostanza defn to-polyline3f (v:ref<g-nested-v3d>) -> ref<PolyLine3f> :
   val strokes = Vector<Tuple<V3f>>()
   val len = call-c g_nested_v3d_len(v.value)
@@ -377,6 +462,13 @@ public lostanza defn to-polyline2f (v:ref<g-nested-v2d>) -> ref<PolyLine2f> :
   for (var i:int = 0, i < len, i = i + 1) :
     add(strokes, to-tuple-v2f(g-nested-v2d-elt(v, new Int{i})))
   return PolyLine2f(to-tuple(strokes))
+
+public lostanza defn to-polyline2f (v:ref<g-nested-circle-arc>, max-deviation:ref<Float>) -> ref<PolyLine2f> :
+  val polyline = g-nested-circle-arc-discretize(v, max-deviation)
+  return to-polyline2f(polyline)
+
+public lostanza defn to-polygon (v:ref<g-nested-circle-arc>, max-deviation:ref<Float>) -> ref<Polygon> :
+  return to-polygon(to-polyline2f(v, max-deviation))
 
 public lostanza defn to-polygon (v:ref<g-polygon>) -> ref<Polygon> :
   val contours = Vector<Contour>()
@@ -460,6 +552,36 @@ public lostanza defn g-mesh-save (f:ref<String>, m:ref<g-mesh>) -> ref<g-mesh> :
 public lostanza defn g-mesh-load (f:ref<String>) -> ref<g-mesh> :
   return new g-mesh{call-c g_mesh_load(addr!(f.chars))}
   
+public lostanza defn g-nested-circle-arc-find-overlapping-offsets (a:ref<g-nested-circle-arc>, gap:ref<Float>) -> ref<g-nested-circle-arc> :
+  return new g-nested-circle-arc{call-c g_nested_circle_arc_find_overlapping_offsets(gap.value, a.value)}
+
+public lostanza defn g-nested-circle-arc-discretize (a:ref<g-nested-circle-arc>, max-deviation:ref<Float>) -> ref<g-nested-v2d> :
+  return new g-nested-v2d{call-c g_nested_circle_arc_discretize(max-deviation.value, 1, a.value)}
+
+public lostanza defn g-nested-circle-arc-open-offset (a:ref<g-nested-circle-arc>, b:ref<Float>) -> ref<g-nested-circle-arc> :
+  return new g-nested-circle-arc{call-c g_nested_circle_arc_open_offset(a.value, b.value)}
+
+public lostanza defn g-nested-circle-arc-closed-offset (a:ref<g-nested-circle-arc>, b:ref<Float>) -> ref<g-nested-circle-arc> :
+  return new g-nested-circle-arc{call-c g_nested_circle_arc_closed_offset(a.value, b.value)}
+
+public lostanza defn g-nested-circle-arc-intersection (a:ref<g-nested-circle-arc>, b:ref<g-nested-circle-arc>) -> ref<g-nested-circle-arc> :
+  return new g-nested-circle-arc{call-c g_nested_circle_arc_intersection(a.value, b.value)}
+  
+public lostanza defn g-nested-circle-arc-intersection (a:ref<g-nested-circle-arc>) -> ref<g-nested-circle-arc> :
+  return new g-nested-circle-arc{call-c g_nested_circle_arc_intersection1(a.value)}
+  
+public lostanza defn g-nested-circle-arc-concat (a:ref<g-nested-circle-arc>, b:ref<g-nested-circle-arc>) -> ref<g-nested-circle-arc> :
+  return new g-nested-circle-arc{call-c g_nested_circle_arc_concat(a.value, b.value)}
+  
+public lostanza defn g-nested-circle-arc-difference (a:ref<g-nested-circle-arc>, b:ref<g-nested-circle-arc>) -> ref<g-nested-circle-arc> :
+  return new g-nested-circle-arc{call-c g_nested_circle_arc_difference(a.value, b.value)}
+  
+public lostanza defn g-nested-circle-arc-union (a:ref<g-nested-circle-arc>, b:ref<g-nested-circle-arc>) -> ref<g-nested-circle-arc> :
+  return new g-nested-circle-arc{call-c g_nested_circle_arc_union(a.value, b.value)}
+
+public lostanza defn g-nested-circle-arc-not (a:ref<g-nested-circle-arc>) -> ref<g-nested-circle-arc> :
+  return new g-nested-circle-arc{call-c g_nested_circle_arc_not(a.value)}
+
 public lostanza defn g-polygon-circle (d:ref<Float>) -> ref<g-polygon> :
   return new g-polygon{call-c g_polygon_circle(d.value)}
   
@@ -577,10 +699,8 @@ defmethod xyz (mat:Mat44f, s:Shape, ) :
 
 public defn cube (xlo:Float, ylo:Float, zlo:Float, xhi:Float, yhi:Float, zhi:Float) :
   Shape(g-mesh-cube-lo-hi(g-v3d(xlo, ylo, zlo), g-v3d(xhi, yhi, zhi)))
-public defn bit-or (a:Shape, b:Shape) -> Shape :
+public defmethod bit-or (a:Shape, b:Shape) -> Shape :
   Shape(g-mesh-union(mesh(a), mesh(b)))
-public defn union (args:Seqable<Shape>) -> Shape :
-  reduce(bit-or, args)
 public defn bit-and (a:Shape, b:Shape) -> Shape :
   Shape(g-mesh-intersection(mesh(a), mesh(b)))
 public defn intersection (args:Seqable<Shape>) -> Shape :
@@ -609,7 +729,7 @@ public defn capsule (a:V3f, b:V3f, d:Float) : todo-shape()
 
 ;;; 3D SUPPORT
 
-public defmethod rgb (c:V4f, s:Shape) -> Shape : s
+;; public defmethod rgb (c:V4f, s:Shape) -> Shape : s
 
 public defn cube (w:Float, h:Float, d:Float) : cube(dim-min(w), dim-min(h), dim-min(d), dim-max(w), dim-max(h), dim-max(d))
 public defn cube (d:Float) : cube(d, d, d)
@@ -617,7 +737,7 @@ public defn cube (xy:Float, z:Float) : cube(xy, xy, z)
 public defn cube (v:V3f) : cube(x(v), y(v), z(v))
 public defn box (b:Box3f) : cube(x(lo(b)), y(lo(b)), z(lo(b)), x(hi(b)), y(hi(b)), z(hi(b)))
 public defn cylinder (d:Float, h:Float) : extrude(h, circle(d))
-public defn capsule (d:Float, h:Float) :
+public defn capsule3 (d:Float, h:Float) :
   val r = 0.5f * h
   cylinder(d, h) | mov-z(r, sphere(d)) | mov-z((- r), sphere(d))
 public defn thicken (segments:Seqable<[V3f, V3f]>, f:(V3f, V3f, Float) -> Shape, d:Float) -> Shape :
@@ -636,7 +756,6 @@ public defn circle (d:Float) -> g-polygon :
   g-polygon-circle(d)
 public defn xy (z:Float, s:Shape) -> g-polygon :
   g-mesh-slice(z, mesh(s))
-public defn capsule2 (a:V3f, b:V3f, d:Float) -> g-polygon : todo-polygon()
 
 public defn bit-or (a:g-polygon, b:g-polygon) -> g-polygon :
   g-polygon-union(a, b)
@@ -655,9 +774,9 @@ defmethod xyz (mat:Mat44f, p:g-polygon) :
 public defn xy (s:Shape) -> g-polygon : xy(0.0f, s)
 public defn rect (w:Float, h:Float) : rect(dim-min(w), dim-min(h), dim-max(w), dim-max(h))
 public defn square (d:Float) : rect(d, d)
-;; public defn capsule2 (w:Float, h:Float) :
-;;   val r = 0.5f * w
-;;   rect(w, h) | mov-x(r, circle(h)) | mov-x((- r), circle(h))
+public defn capsule2 (d:Float, w:Float) :
+  val r = 0.5f * w
+  rect(w, d) | mov-x(r, circle(d)) | mov-x((- r), circle(d))
 
 ;; public defn intersection (args:Seqable<Shape>) -> Shape :
 ;;   reduce(bit-and, args)
@@ -681,7 +800,6 @@ public defn extrude (h:Float) : extrude{h, _}
 public var *resolution* = 8.0f
 public var *render-offset* = 16.0f
 
-
 public deftype Glue <: ShapeGlue&Shape
 
 public defn Glue (amount:Float) :
@@ -703,7 +821,7 @@ defn todo-polygon () : g-polygon-none()
 defn todo-pixels () : Pixels(V3i(1, 1, 1), 1.0f, ByteArray(1))
 
 defmethod spacer (g:Shape, gdims:V3f) : cube(gdims)
-defmethod spacer (g:Assembly, dims:V3f) : Assembly(BLACK, [ spacer(spacer-empty(), dims) ])
+defmethod spacer (g:Assembly, dims:V3f) : rgb(BLACK, Assembly([ spacer(spacer-empty(), dims) ]))
 
 public defn spacer-x (gdim:Float) : spacer-x(gdim, spacer-empty())
 public defn spacer-y (gdim:Float) : spacer-y(gdim, spacer-empty())

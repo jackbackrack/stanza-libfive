@@ -10,5 +10,6 @@ defpackage geode-repl :
    import utils
    import grid
    import nester
+   import reader
 
 
