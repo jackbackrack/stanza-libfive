@@ -829,13 +829,13 @@ public defn cylinder (d:Float, h:Float) -> Shape :
   extrude(h, circle(d))
 
 ;; TODO: BROKEN
-public defn box (dims:V3f) -> Shape :
-  defn fab (p) : len(max(abs(p) - lit(0.5f * dims), lit(0.0)))
-  Shape(fab, dims-to-box(dims))
+;; public defn box (dims:V3f) -> Shape :
+;;   defn fab (p) : len(max(abs(p) - lit(0.5f * dims), lit(0.0)))
+;;   Shape(fab, dims-to-box(dims))
 
 ;; TODO: BROKEN
-public defn round-box (dims:V3f, r:Float) -> Shape :
-  offset(box(dims), r)
+;; public defn round-box (dims:V3f, r:Float) -> Shape :
+;;   offset(box(dims), r)
 
 ;; public defn capsule (a:V3f, b:V3f, d:Float) -> Shape :
 ;;   val r  = 0.5f * d
