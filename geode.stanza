@@ -411,7 +411,7 @@ public lostanza defn to-g-array-v3d (v:ref<Tuple<V3f>>) -> ref<g-array-v3d> :
 
 public lostanza defn to-g-array-circle-arc (v:ref<Tuple<V2f>>) -> ref<g-array-circle-arc> :
   val args = call-c g_args_fab()
-  for (var i:int = 0, i < length(v).value, i = i + 1) :
+  for (var i:int = length(v).value - 1, i >= 0, i = i - 1) :
     call-c g_args_add(args, to-g-circle-arc(get(v, new Int{i})).value)
   return new g-array-circle-arc{call-c g_array_circle_arc_fab(args)}
 
