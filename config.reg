@@ -13,7 +13,8 @@ defregistry stanza-ao :
   ;;   package eval-libfive-repl
   file "geode.stanza" :
     package geode :
-      link * ["${GEN}/cad.a" "-lgeode" "-lc++"]
+      link Darwin ["${GEN}/cad.a" "-lgeode" "-lc++" "-framework OpenGL"]
+      link GNU/Linux ["${GEN}/cad.a" "-lgeode" "-lstdc++" "-lGLU"]
   file "geode-gfx.stanza"
   file "geode-eval.stanza"
   file "geode-repl.stanza"

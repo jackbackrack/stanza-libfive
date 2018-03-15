@@ -241,6 +241,7 @@ extern g_mesh_save: (ptr<byte>, ptr<g_mesh>) -> ptr<g_mesh>
 extern g_mesh_load: (ptr<byte>) -> ptr<g_mesh>
 
 extern g_nested_circle_arc_concat: (ptr<g_nested_circle_arc>, ptr<g_nested_circle_arc>) -> ptr<g_nested_circle_arc>
+extern g_nested_circle_arc_concat_all: (ptr<g_args>) -> ptr<g_nested_circle_arc>
 extern g_nested_circle_arc_find_overlapping_offsets: (float, ptr<g_nested_circle_arc>) -> ptr<g_nested_circle_arc>
 extern g_nested_circle_arc_discretize: (float, int, ptr<g_nested_circle_arc>) -> ptr<g_nested_v2d>
 extern g_nested_circle_arc_open_offset: (ptr<g_nested_circle_arc>, float) -> ptr<g_nested_circle_arc>
@@ -573,6 +574,12 @@ public lostanza defn g-nested-circle-arc-intersection (a:ref<g-nested-circle-arc
 public lostanza defn g-nested-circle-arc-concat (a:ref<g-nested-circle-arc>, b:ref<g-nested-circle-arc>) -> ref<g-nested-circle-arc> :
   return new g-nested-circle-arc{call-c g_nested_circle_arc_concat(a.value, b.value)}
   
+public lostanza defn g-nested-circle-arc-concat-all (arcz:ref<Tuple<g-nested-circle-arc>>) -> ref<g-nested-circle-arc> :
+  val args = call-c g_args_fab()
+  for (var i:int = 0, i < length(arcz).value, i = i + 1) :
+    call-c g_args_add(args, get(arcz, new Int{i}).value)
+  return new g-nested-circle-arc{call-c g_nested_circle_arc_concat_all(args)}
+  
 public lostanza defn g-nested-circle-arc-difference (a:ref<g-nested-circle-arc>, b:ref<g-nested-circle-arc>) -> ref<g-nested-circle-arc> :
   return new g-nested-circle-arc{call-c g_nested_circle_arc_difference(a.value, b.value)}
   
@@ -768,6 +775,20 @@ public defn hull (p:g-polygon) -> g-polygon :
 
 defmethod xyz (mat:Mat44f, p:g-polygon) : 
   g-polygon-mul(to-g-mat(mat), p)
+
+public defn offset (amount:Float, a:g-nested-circle-arc) -> g-nested-circle-arc :
+  g-nested-circle-arc-closed-offset(a, amount)
+public defn open-offset (amount:Float, a:g-nested-circle-arc) -> g-nested-circle-arc :
+  g-nested-circle-arc-open-offset(a, amount)
+public defn to-g-nested-circle-arc (p:Polygon) -> g-nested-circle-arc :
+  to-g-nested-circle-arc $ to-polyline $ p
+
+public defn bit-or (a:g-nested-circle-arc, b:g-nested-circle-arc) -> g-nested-circle-arc :
+  g-nested-circle-arc-union(a, b)
+public defn bit-and (a:g-nested-circle-arc, b:g-nested-circle-arc) -> g-nested-circle-arc :
+  g-nested-circle-arc-intersection(a, b)
+public defn minus (a:g-nested-circle-arc, b:g-nested-circle-arc) -> g-nested-circle-arc :
+  g-nested-circle-arc-difference(a, b)
 
 ;;; 2D SUPPORT
 
