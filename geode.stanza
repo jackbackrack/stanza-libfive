@@ -471,6 +471,11 @@ public lostanza defn to-polyline2f (v:ref<g-nested-circle-arc>, max-deviation:re
 public lostanza defn to-polygon (v:ref<g-nested-circle-arc>, max-deviation:ref<Float>) -> ref<Polygon> :
   return to-polygon(to-polyline2f(v, max-deviation))
 
+public lostanza defn to-g-nested-circle-arc (a:ref<g-array-circle-arc>) -> ref<g-nested-circle-arc> :
+  val args = call-c g_args_fab()
+  call-c g_args_add(args, a.value)
+  return new g-nested-circle-arc{call-c g_nested_circle_arc_fab(args)}
+
 public lostanza defn to-polygon (v:ref<g-polygon>) -> ref<Polygon> :
   val contours = Vector<Contour>()
   val len = call-c g_polygon_len(v.value)
