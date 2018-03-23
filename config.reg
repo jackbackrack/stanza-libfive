@@ -1,23 +1,14 @@
 defregistry stanza-ao :
-  ;; file "libfive.cpp" :
-  ;;   flags "-std=c++11 -I/usr/local/include/eigen3"
-  ;; file "libfive.stanza" :
-  ;;   package libfive :
-  ;;     dependency "${GEN}/libfive.o"
-  ;;     link Darwin ["${GEN}/libfive.o" "-lfive" "-lc++"]
-  ;;     link GNU/Linux ["${GEN}/libfive.o" "-lfive" "-lstdc++"]
-  ;; file "libfive-gfx.stanza"
-  ;; file "libfive-eval.stanza"
-  ;; file "libfive-repl.stanza"
-  ;; file "eval-libfive-repl.stanza" gen :
-  ;;   package eval-libfive-repl
-  file "geode.stanza" :
-    package geode :
-      link Darwin ["${GEN}/cad.a" "-lgeode" "-lc++" "-framework OpenGL"]
-      link GNU/Linux ["${GEN}/cad.a" "-lgeode" "-lstdc++" "-lGLU"]
-  file "geode-gfx.stanza"
-  file "geode-eval.stanza"
-  file "geode-repl.stanza"
-  file "eval-geode-repl.stanza" gen :
-    package eval-geode-repl
+  file "libfive.cpp" :
+    flags "-std=c++11 -I/usr/local/include/eigen3"
+  file "libfive.stanza" :
+    package libfive :
+      dependency "${GEN}/libfive.o"
+      link Darwin ["${GEN}/libfive.o" "-lfive" "-lc++"]
+      link GNU/Linux ["${GEN}/libfive.o" "-lfive" "-lstdc++"]
+  file "libfive-gfx.stanza"
+  file "libfive-eval.stanza"
+  file "libfive-repl.stanza"
+  file "eval-libfive-repl.stanza" gen :
+    package eval-libfive-repl
   file "sheet.stanza"

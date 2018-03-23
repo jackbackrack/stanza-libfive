@@ -6,8 +6,8 @@ defpackage sheet :
   import glu
   import geom
   import font
-  import geode
-  ;; import libfive
+  ;; import geode
+  import libfive
   import grid
   import nester
 
