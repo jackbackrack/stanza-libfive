@@ -9,14 +9,6 @@ defpackage libfive :
 
 val @doc-libfive = "## LIBFIVE -- distance fields"
 
-val @doc-shape = "SHAPE -- a libfive object represented by a distance field"
-public deftype Shape <: AnyShape
-
-public defn shapes (any-shapes:Seqable<AnyShape>) -> Seqable<Shape> :
-  generate<Shape> : for e in any-shapes do : yield(e as Shape) when e is Shape
-
-public defn shapes (p:Poseable) : shapes(any-shapes(p))
-
 lostanza deftype libfive_interval :
   lower : float
   upper : float
@@ -914,9 +906,6 @@ public defn jit (g:Geom) -> Geom :
       val cs = children(p)
       jit-poseable(p) when (length(cs) == 0 or cs[0] is Shape) else p
     (geom) : geom
-
-public var *resolution* = 8.0f
-public defn set-resolution (r:Float) : *resolution* = r
 
 public var *max-bounds*:False|Box3f = false
 public defn max-bounds () :

@@ -4,8 +4,7 @@ defregistry stanza-ao :
   file "libfive.stanza" :
     package libfive :
       dependency "${GEN}/libfive.o"
-      link Darwin ["${GEN}/libfive.o" "-lfive" "-lc++"]
-      link GNU/Linux ["${GEN}/libfive.o" "-lfive" "-lstdc++"]
+      link * ["${GEN}/libfive.o" "-lfive"]
   file "libfive-gfx.stanza"
   file "libfive-eval.stanza"
   file "libfive-repl.stanza"

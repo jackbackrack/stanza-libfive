@@ -10,7 +10,7 @@ defpackage libfive-eval :
    import font
    import eval-libfive-repl
 
-public defn shape-eval (e) :
+public defmethod shape-eval (e) :
   match(e) :
     (g:Geom) : jit(g)
     (o) :      Msg(to-string(o))
