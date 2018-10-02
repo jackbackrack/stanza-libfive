@@ -71,7 +71,7 @@ libfive_mesh* libfive_tree_render_mesh_spread(libfive_tree tree, float lx, float
   
 libfive_region3* libfive_tree_bounds_star(libfive_tree tree) {
   libfive_region3* region = (libfive_region3*)malloc(sizeof(libfive_region3));
-  *region = libfive_tree_bounds(tree);
+  // *region = libfive_tree_bounds(tree);
   return region;
 }
 
