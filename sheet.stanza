@@ -13,39 +13,84 @@ defpackage sheet :
 
 public var *explosion* = 0.25f
 
-public defn weld (i-a-shapes:Seqable<Shape>, i-b-shapes:Seqable<Shape>) -> Seqable<Shape> :
+public defn meld (i-a-shapes:Seqable<Shape>, i-b-shapes:Seqable<Shape>) -> Seqable<Shape> :
   val [a-shapes, b-shapes] = [to-tuple $ i-a-shapes, to-tuple $ i-b-shapes]
-  println-all(["WELDING " length(a-shapes) + length(b-shapes)])
+  println("MELDING %_ AND %_" % [length(a-shapes) length(b-shapes)])
+  ;; defn overlap? (a:Shape, b:Shape) -> True|False :
+  ;;   val i = fatten(bounds(a) & bounds(b), xyz(EPS))
+  ;;   val mid = dims(i)[sorted-indices(dims(i))[1]]
+  ;;   val res = not empty?(i) and mid > (min(dims(bounds(a))) * 1.1f)
+  ;;   println-all([" I " dims(i) " MID-I " mid " MIN-A " min(dims(bounds(a))) " RES = " res])
+  ;;   res
   defn overlap? (a:Shape, b:Shape) -> True|False :
     val i = fatten(bounds(a) & bounds(b), xyz(EPS))
+    val same-min? = min-idx(dims(bounds(a))) == min-idx(dims(bounds(b)))
     val mid = dims(i)[sorted-indices(dims(i))[1]]
-    val res = not empty?(i) and mid > (min(dims(bounds(a))) * 1.1f)
-    println-all([" I " dims(i) " MID-I " mid " MIN-A " min(dims(bounds(a))) " RES = " res])
+    val res = not empty?(i) and same-min? and mid > (min(dims(bounds(a))) * 0.5f)
+    println-all([" I " dims(i) " SAME-MIN? " same-min? " MID-I " mid " MIN-A " min(dims(bounds(a))) " RES = " res])
     res
   val res = to-tuple $ generate<Shape> :
     val bs-mated? = HashTable<Int, Int>()
     for (a in a-shapes, i in 0 to false) do :
-      println-all(["WELD I " i " DIMS " dims(bounds(a))])
+      println-all(["MELD I " i " DIMS " dims(bounds(a))])
       val mates = to-tuple $ generate<Shape> :
         for (b in b-shapes, j in 0 to false) do :
-          print-all(["CONSIDERING " i " / " j ": "])
+          println-all(["CONSIDERING " i " / " j ": " " OVERLAP? " overlap?(a, b) " MATED? " key?(bs-mated?, j) " -> " (overlap?(a, b) and not key?(bs-mated?, j))])
           if overlap?(a, b) and not key?(bs-mated?, j) :
             yield(b)
             bs-mated?[j] = j
       println-all(["MATES " length(mates)])
-      yield(a | union(mates))
+      yield(a | union-or(mates, empty()))
     for (b in b-shapes, j in 0 to false) do :
       if not key?(bs-mated?, j) :
         println-all(["EXTRA B " j])
         yield(b)
-  println-all(["WELDING " length(res) " TOTAL"])
+  println-all(["MELDING " length(res) " TOTAL"])
   res
 
-public defn weld (a-shapes:Poseable, b-shapes:Poseable) -> Seqable<Shape> :
-  weld(shapes $ a-shapes, shapes $ b-shapes)
+public defn frame-idx (t:Float, elt:Assembly, idx:Int) -> Assembly :
+  val dims = dims(bounds(elt))
+  val div  = cube(set-elt(dims, idx, t))
+  val divs = stack-idx(dims[idx], idx, glue $ [div div])
+  group $ [group $ divs, elt]
 
-public defn weld (poseables:Seqable<Poseable>) -> Seqable<Shape> :
-  reduce(weld, seq(shapes, poseables))
+public defn frame-x (t:Float, elt:Assembly) : frame-idx(t, elt, 0)
+public defn frame-y (t:Float, elt:Assembly) : frame-idx(t, elt, 1)
+public defn frame-z (t:Float, elt:Assembly) : frame-idx(t, elt, 2)
+
+public defn frame-x (t:Float) : frame-x{t, _}
+public defn frame-y (t:Float) : frame-y{t, _}
+public defn frame-z (t:Float) : frame-z{t, _}
+
+public defn dividers-idx<?T> (t:Float, i-elts:Seqable<?T&Poseable>, idx:Int) -> Assembly :
+  val elts = to-tuple $ i-elts
+  val null = spacer(elts[0], V3f-fill(0.0f))
+  val dimz = to-tuple $ seq({ dims(bounds(_)) }, elts)
+  val div  = cube(set-elt(dimz[0], idx, t)) ;; should use max
+  val dms = to-tuple $ for (dims in dimz, i in 0 to false) seq :
+    val off = ((0.5f when (i == 0 or i == length(dimz) - 1) else 1.0f) * t)
+    val res = dims[idx] - off
+    ;; println("I %_ DIMS-IDX %_ OFF %_ -> RES %_" % [i dims[idx] off res])
+    res
+  ;; println("DIMS %_" % [dms])
+  val divs = space-idx(dms, idx, cat-all([[null], repeatedly({ div }, length(elts) - 1), [null]]))
+  val res = group $ [group(divs) group(stack-meld-idx(t, elts, idx, -1.0f))]
+  ;; println("DIMS %_" % [dims(bounds(res))])
+  res
+
+public defn dividers-x<?T> (t:Float, i-elts:Seqable<?T&Poseable>) : dividers-idx(t, i-elts, 0)
+public defn dividers-y<?T> (t:Float, i-elts:Seqable<?T&Poseable>) : dividers-idx(t, i-elts, 1)
+public defn dividers-z<?T> (t:Float, i-elts:Seqable<?T&Poseable>) : dividers-idx(t, i-elts, 2)
+
+public defn dividers-x (t:Float) : dividers-x{t, _}
+public defn dividers-y (t:Float) : dividers-y{t, _}
+public defn dividers-z (t:Float) : dividers-z{t, _}
+
+public defn meld (a-shapes:Poseable, b-shapes:Poseable) -> Seqable<Shape> :
+  meld(shapes $ a-shapes, shapes $ b-shapes)
+
+public defn meld (poseables:Seqable<Poseable>) -> Seqable<Shape> :
+  reduce(meld, seq(shapes, poseables))
 
 public defn square-tooth (i:Box3f, n-slots:Int) -> Shape :
   val idx       = max-idx(dims(i))
@@ -73,7 +118,7 @@ public defn get-even-teeth (i:Box3f, get-tooth:(Box3f, Int) -> Shape, i-n-slots:
   val tooth     = get-tooth(i, n-slots)
   defn gen-tooth (n:Int) : tooth ;; stooth when n == 0 or n == (num - 1) else tooth
   val teeth     = to-tuple $ seq(gen-tooth, 0 to num) 
-  val glued-teeth = to-tuple $ glue-when(n-slots % 2 == 0, teeth)
+  val glued-teeth = to-tuple $ glue-when(n-slots % 2 == 0, false, teeth)
   ;; println-all(["N-SLOTS " n-slots " NUM " num " N-TEETH " length(teeth) " GLUED-TEETH " length(glued-teeth)])
   union $ stack-x(max-dim, glued-teeth)
   ;; println-all(["N-SLOTS " n-slots " DIMS " dims(i) " MAX-IDX " idx " SLOT-DIM " slot-dim " CTRI " center(i) " TDIMS " dims(bounds(tooths))])
@@ -336,8 +381,9 @@ public defn split-overlaps (elts:Seqable<Shape>, t:Float) -> Seqable<Shape> :
         for j in (i + 1) to length(pieces) do :
           val [bi, bj] = [bounds(pieces[i]), bounds(pieces[j])]
           ;; println-all(["I " i " J " j " BI " bi " BJ " bj])
-          if not empty?(bi & bj) :
-            ;; println-all(["CHECKING " i " AND " j])
+          val o = bi & bj
+          if not empty?(o) and volume(dims(o)) > 0.0f:
+            ;; println-all(["CHECKING " i " AND " j " -> " o])
             if full-captured2d?(bi, bj) :
               val [a, b] = split-full-overlap(pieces[i], pieces[j], t)
               println-all([  "  FULL SPLIT " bounds(a) " / " bounds(b)])
@@ -394,13 +440,14 @@ public defn quilt (shape:Shape, stock-dims:V3f, parity:Int) -> Seqable<Shape> :
   val cmps-2 = to-tuple $ seq({1 when _ <= _ else 0}, sorted-shape-dims-2, sorted-stock-dims)
   val n-1 = reduce(i+, cmps-1)
   val n-2 = reduce(i+, cmps-2)
-  ;; println-all(["N " n " SHAPE-DIMS " sorted-shape-dims " STOCK-DIMS " sorted-stock-dims " CMPS " cmps])
+  ;; println-all(["N " n " SHAPE-DIMS-1 " sorted-shape-dims-1 " SHAPE-DIMS-2 " sorted-shape-dims-2 " STOCK-DIMS " sorted-stock-dims " CMPS-1 " cmps-1 " CMPS-2 " cmps-2])
+  defn zero-idx (cmps:Tuple<Int>) : index-of(cmps, 0) as Int
   if n-1 == 3 :
     [ shape ]
   else if n-1 == 2 :
-    quilt-one(shape, sorted-stock-dims[2], max-idx(shape-dims), mid-idx(shape-dims), t, parity)
+    quilt-one(shape, sorted-stock-dims[zero-idx(cmps-1)], max-idx(shape-dims), mid-idx(shape-dims), t, parity)
   else if n-2 == 2 :
-    quilt-one(shape, sorted-stock-dims[1], max-idx(shape-dims), mid-idx(shape-dims), t, parity)
+    quilt-one(shape, sorted-stock-dims[zero-idx(cmps-2)], max-idx(shape-dims), mid-idx(shape-dims), t, parity)
   else :
     val splits-0 = quilt-one(shape, sorted-stock-dims[2], max-idx(shape-dims), mid-idx(shape-dims), t, parity)
     to-tuple $ cat-all $ seq(quilt-one{_, sorted-stock-dims[1], mid-idx(shape-dims), max-idx(shape-dims), t, parity}, splits-0)
@@ -547,8 +594,9 @@ public defn arranged (pcs:Tuple<Shape>, c:Config) :
           val angle = angle(pose(page-pose))
           ;; val off = pt-of(result(p), translation(pose(page-pose))) + ctr-pt(rotate(angle, grids[pc-id])) + stock-boundary(c)
           val off = base-off + pt-of(result(p), translation(pose(page-pose))) + ctr-pt(rotate(angle, grids[pc-id]))
-          ;; println-all(["IDX " translation(pose(page-pose)) " OFF " off " ROT " angle " BOUNDS " bounds(smashed-pcs[pc-id])])
+          println-all(["IDX " translation(pose(page-pose)) " OFF " off " ROT " angle " BOUNDS " bounds(smashed-pcs[pc-id])])
           yield(mov(xyz(off), rot-z(to-float $ angle, smashed-pcs[pc-id])))
+          ;; yield(mov(xyz(off), smashed-pcs[pc-id]))
 
 defn do-sliced (pcs:Tuple<Shape>, c:Config) :
   val pages = to-tuple $ arranged(pcs, c) ;; 
@@ -563,9 +611,12 @@ public defn sliced (pcs:Tuple<Shape>, c:Config) :
   for page in do-sliced(pcs, c) seq :
     cat(page, to-polygon $ Contour $ corners $ dims-to-box $ stock-dims(c))
 
-public defn svgd (c:Config, res:Results) :
-  for (slice in do-sliced(pcs(res), c), i in 0 to false) do :
+public defn svgd (c:Config, pcs:Tuple<Shape>) :
+  for (slice in do-sliced(pcs, c), i in 0 to false) do :
     val mag-sliced = mag(xyz(V3f(72.0f, 72.0f)), slice)
     val half = 0.5f * stock-dims(c)
     val bbox = Box2f(-72.0f * half, 72.0f * half)
     svg(rgb(RED, mag-sliced), string-join(["tst-" i ".svg"]), bbox)
+
+public defn svgd (c:Config, res:Results) :
+  svgd(c, pcs(res))
