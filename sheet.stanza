@@ -3,6 +3,7 @@ defpackage sheet :
   import math
   import collections
   import utils
+  import union-find
   import glu
   import geom
   import font
@@ -13,39 +14,45 @@ defpackage sheet :
 
 public var *explosion* = 0.25f
 
+defn overlap? (a:Shape, b:Shape) -> True|False :
+  val i = fatten(bounds(a) & bounds(b), xyz(EPS))
+  val same-min? = min-idx(dims(bounds(a))) == min-idx(dims(bounds(b)))
+  val mid = dims(i)[sorted-indices(dims(i))[1]]
+  val res = not empty?(i) and same-min? and mid > (min(dims(bounds(a))) * 0.5f)
+  ;; println-all([" I " dims(i) " SAME-MIN? " same-min? " MID-I " mid " MIN-A " min(dims(bounds(a))) " RES = " res])
+  res
+
 public defn meld (i-a-shapes:Seqable<Shape>, i-b-shapes:Seqable<Shape>) -> Seqable<Shape> :
-  val [a-shapes, b-shapes] = [to-tuple $ i-a-shapes, to-tuple $ i-b-shapes]
-  println("MELDING %_ AND %_" % [length(a-shapes) length(b-shapes)])
-  ;; defn overlap? (a:Shape, b:Shape) -> True|False :
-  ;;   val i = fatten(bounds(a) & bounds(b), xyz(EPS))
-  ;;   val mid = dims(i)[sorted-indices(dims(i))[1]]
-  ;;   val res = not empty?(i) and mid > (min(dims(bounds(a))) * 1.1f)
-  ;;   println-all([" I " dims(i) " MID-I " mid " MIN-A " min(dims(bounds(a))) " RES = " res])
-  ;;   res
-  defn overlap? (a:Shape, b:Shape) -> True|False :
-    val i = fatten(bounds(a) & bounds(b), xyz(EPS))
-    val same-min? = min-idx(dims(bounds(a))) == min-idx(dims(bounds(b)))
-    val mid = dims(i)[sorted-indices(dims(i))[1]]
-    val res = not empty?(i) and same-min? and mid > (min(dims(bounds(a))) * 0.5f)
-    println-all([" I " dims(i) " SAME-MIN? " same-min? " MID-I " mid " MIN-A " min(dims(bounds(a))) " RES = " res])
-    res
-  val res = to-tuple $ generate<Shape> :
-    val bs-mated? = HashTable<Int, Int>()
-    for (a in a-shapes, i in 0 to false) do :
-      println-all(["MELD I " i " DIMS " dims(bounds(a))])
-      val mates = to-tuple $ generate<Shape> :
-        for (b in b-shapes, j in 0 to false) do :
-          println-all(["CONSIDERING " i " / " j ": " " OVERLAP? " overlap?(a, b) " MATED? " key?(bs-mated?, j) " -> " (overlap?(a, b) and not key?(bs-mated?, j))])
-          if overlap?(a, b) and not key?(bs-mated?, j) :
-            yield(b)
-            bs-mated?[j] = j
-      println-all(["MATES " length(mates)])
-      yield(a | union-or(mates, empty()))
-    for (b in b-shapes, j in 0 to false) do :
-      if not key?(bs-mated?, j) :
-        println-all(["EXTRA B " j])
-        yield(b)
-  println-all(["MELDING " length(res) " TOTAL"])
+  val [a-sets, b-sets] = [to-tuple $ seq(UFSet, i-a-shapes), to-tuple $ seq(UFSet, i-b-shapes)]
+  for (a in a-sets, i in 0 to false) do :
+    ;; println-all(["MELD I " i " DIMS " dims(bounds(value(a)))])
+    for (b in b-sets, j in 0 to false) do :
+      ;; println-all(["CONSIDERING " i " / " j ": " " OVERLAP? " overlap?(value(a), value(b))])
+      if overlap?(value(a), value(b)) :
+        ;; println("MERGING %_ AND %_" % [id(a), id(b)])
+        merge!(a, b)
+  val members = collect-members $ cat(a-sets, b-sets)
+  val res = to-tuple $ for set in members seq :
+    ;; println("ROOT %_ %_ MEMBERS" % [id(key(set)) length(value(set))])
+    union(seq(value, value(set)))
+  println-all(["MELDING " (length(a-sets) length(b-sets)) " INTO " length(res)])
+  res
+
+public defn meld-all (i-shapes:Seqable<Shape>) -> Seqable<Shape> :
+  val sets = to-tuple $ seq(UFSet, i-shapes)
+  for (a in sets, i in 0 to false) do :
+    ;; println-all(["MELD I " i " DIMS " dims(bounds(value(a)))])
+    for j in i to length(sets) do :
+      val b = sets[j]
+      ;; println-all(["CONSIDERING " i " / " j ": " " OVERLAP? " overlap?(value(a), value(b))])
+      if overlap?(value(a), value(b)) :
+        ;; println("MERGING %_ AND %_" % [id(a), id(b)])
+        merge!(a, b)
+  val members = collect-members $ sets
+  val res = to-tuple $ for set in members seq :
+    ;; println("ROOT %_ %_ MEMBERS" % [id(key(set)) length(value(set))])
+    union(seq(value, value(set)))
+  println-all(["MELDING " length(sets) " INTO " length(res)])
   res
 
 public defn frame-idx (t:Float, elt:Assembly, idx:Int) -> Assembly :
@@ -118,7 +125,7 @@ public defn get-even-teeth (i:Box3f, get-tooth:(Box3f, Int) -> Shape, i-n-slots:
   val tooth     = get-tooth(i, n-slots)
   defn gen-tooth (n:Int) : tooth ;; stooth when n == 0 or n == (num - 1) else tooth
   val teeth     = to-tuple $ seq(gen-tooth, 0 to num) 
-  val glued-teeth = to-tuple $ glue-when(n-slots % 2 == 0, false, teeth)
+  val glued-teeth = to-tuple $ glue-when(n-slots % 2 == 0, false, 1.0f, teeth)
   ;; println-all(["N-SLOTS " n-slots " NUM " num " N-TEETH " length(teeth) " GLUED-TEETH " length(glued-teeth)])
   union $ stack-x(max-dim, glued-teeth)
   ;; println-all(["N-SLOTS " n-slots " DIMS " dims(i) " MAX-IDX " idx " SLOT-DIM " slot-dim " CTRI " center(i) " TDIMS " dims(bounds(tooths))])
