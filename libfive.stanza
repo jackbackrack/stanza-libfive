@@ -924,7 +924,7 @@ public defn pixels (z:Float, s:Shape) -> Pixels :
   ;; println-all(["RENDER-PIXELS-START " bounds(s)])
   val bt = jit(s) as BoundedTree
   ;; val eps = *render-offset* ;; *resolution*
-  val eps = 2.0f / *resolution*
+  val eps = 1.0f / *resolution*
   val bds = Box3f(xyz(xy(lo(bounds(s)))) + V3f((- eps), (- eps), z), xyz(xy(hi(bounds(s)))) + V3f(eps, eps, z))
   val start = current-time-ms()
   val pixels = tree-render-pixels(tree(bt), bds & max-bounds(), *resolution*)

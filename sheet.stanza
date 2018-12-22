@@ -103,6 +103,8 @@ public defn square-tooth (i:Box3f, n-slots:Int) -> Shape :
   val idx       = max-idx(dims(i))
   val max-dim   = dims(i)[idx]
   val slot-dim  = max-dim / to-float(n-slots)
+  if slot-dim < (0.5f * dims(i)[min-idx(dims(i))] - EPS) :
+    println(">>> SMALL-SLOT-DIM %_ MAX-DIM %_ MIN-DIM %_" % [slot-dim, max-dim, dims(i)[min-idx(dims(i))]])
   ;; cube(V3f(slot-dim, pos-inf-f, pos-inf-f))
   cube(V3f(slot-dim, 2.0f * max-dim, 2.0f * max-dim))
 
@@ -249,6 +251,14 @@ public defn captured? (b1:Box3f, b2:Box3f) -> True|False :
   val big-d = max-idx(dims(intersection))
   any-captured?(intersection, b1, big-d) and any-captured?(intersection, b2, big-d)
 
+public defn small-overlap? (b1:Box3f, b2:Box3f) -> True|False :
+  val dims = dims(b1 & b2)
+  val t = dims[min-idx(dims)]
+  val d = dims - V3f(t, t, t)
+  val res = max(V3f(abs(x(d)), abs(y(d)), abs(z(d)))) < EPS
+  ;; println("DIMS = %_ T = %_ D %_ MAX %_ RES %_" % [dims, t, d, max(d), res])
+  res
+
 defn n-smalls (dims:V3f) :
   val elts = to-tuple $ lazy-qsort(seq(get{dims, _}, 0 to 3))
   val n    = for d in 1 to 3 count : abs(elts[0] - elts[d]) < EPS
@@ -290,7 +300,7 @@ public defn abutt-captured2d? (b1:Box3f, b2:Box3f) -> True|False :
   else :
     false
 
-public defn join-pieces (elts:Seqable<Shape>,
+public defn join-pieces (elts:Seqable<Shape>, t:Float
                          default-get-teeth:Box3f -> Shape,
                          abutt-get-teeth:Box3f -> Shape,
                          get-teeths:Tuple<KeyValue<[Int,Int], (Box3f -> Shape)>>,
@@ -316,8 +326,20 @@ public defn join-pieces (elts:Seqable<Shape>,
     for j in (i + 1) to length(pieces) do : 
       val [bi, bj] = [bounds(pieces[i]), bounds(pieces[j])]
       if not empty?(bi & bj) :
+        val dims = dims(bi & bj)
+        val small = min(dims)
+        println(">>> SMALL %_ OVERLAP %_, %_" % [small, i, j]) when small < (t - EPS)
+  for i in 0 to length(pieces) do :
+    for j in (i + 1) to length(pieces) do : 
+      val [bi, bj] = [bounds(pieces[i]), bounds(pieces[j])]
+      if not empty?(bi & bj) :
         val cap? = captured?(bi, bj)
-        val get-teeth = get-square-teeth{_, 2} when cap? else lookup-get-teeth(i, j)
+        val get-teeth = if cap? :
+            get-square-teeth{_, 2}
+          else if small-overlap?(bi, bj) :
+            get-square-teeth{_, 1}
+          else :
+            lookup-get-teeth(i, j)
         ;; println-all(["JOINING I " i " J " j " CAP? " cap? ": "])
         val [ni, nj] = join-two-pieces(pieces[i], pieces[j], get-teeth)
         update(i, ni)
@@ -386,8 +408,8 @@ defn split-abutt-overlap (i0:Int, s0:Shape, i1:Int, s1:Shape, t:Float) -> [Int, 
 public defn split-overlaps (elts:Seqable<Shape>, t:Float) -> Seqable<Shape> :
   val pieces = to-vector<Shape> $ elts
   println-all(["SPLIT-OVERLAPS IN " length(pieces)])
-  for (i in 0 to false, piece in pieces) do :
-    println-all([i "  " bounds(piece)])
+  ;; for (i in 0 to false, piece in pieces) do :
+  ;;   println-all([i "  " bounds(piece)])
   try :
     let loop () :
       val restart? = label<True|False> restart:
@@ -449,7 +471,7 @@ defn quilt-one (s:Shape, mx:Float, d0:Int, d1:Int, t:Float, parity:Int) -> Seqab
 public defn quilt (shape:Shape, stock-dims:V3f, parity:Int) -> Seqable<Shape> :
   val t = min(stock-dims)
   val shape-dims = dims(bounds(shape))
-  println("SHAPE DIMS %_ STOCK DIMS %_" % [shape-dims stock-dims])
+  ;; println("SHAPE DIMS %_ STOCK DIMS %_" % [shape-dims stock-dims])
   val sorted-shape-dims-1 = to-tuple $ lazy-qsort(shape-dims)  
   val sorted-shape-dims-2 = V3f(sorted-shape-dims-1[0], sorted-shape-dims-1[2], sorted-shape-dims-1[1])
   val sorted-stock-dims = to-tuple $ lazy-qsort(stock-dims)
@@ -469,8 +491,8 @@ public defn quilt (shape:Shape, stock-dims:V3f, parity:Int) -> Seqable<Shape> :
     val splits-0 = quilt-one(shape, sorted-stock-dims[2], max-idx(shape-dims), mid-idx(shape-dims), t, parity)
     to-tuple $ cat-all $ seq(quilt-one{_, sorted-stock-dims[1], mid-idx(shape-dims), max-idx(shape-dims), t, parity}, splits-0)
 
-public defn join-pieces (elts:Seqable<Shape>, get-teeth:Box3f -> Shape) :
-  join-pieces(elts, get-teeth, get-teeth, [], [])
+public defn join-pieces (elts:Seqable<Shape>, t:Float, get-teeth:Box3f -> Shape) :
+  join-pieces(elts, t, get-teeth, get-teeth, [], [])
 
 defn num-to-bits (num:Int) -> Tuple<Int> :
   to-tuple $ for i in 2 through 0 by -1 seq : (num >> i) & 1
@@ -554,7 +576,7 @@ public defn Results (fm:Seqable<Shape>, c:Config) :
   val bks1 = to-tuple $ cat-all $ seq(quilt{_, quilt-dims(c), quilt-parity(c)}, bks0)
   ;; val bks1 = bks0
   val bks  = to-tuple $ split-overlaps(bks1, t(c))
-  val pcs = to-tuple $ join-pieces(bks, default-get-teeth(c), default-get-abutt-teeth(c), get-teeths(c), sames(c))
+  val pcs = to-tuple $ join-pieces(bks, t(c), default-get-teeth(c), default-get-abutt-teeth(c), get-teeths(c), sames(c))
   ;; val pcs = bks
   println("DONE RESULTS")
   Results(bks, pcs)
@@ -582,15 +604,18 @@ public defn pixeled (pcs:Seqable<Shape>, c:Config) :
   for pc in pcs seq :
     pixels(0.0f, smash(pc))
 
-public defn do-arranged (pcs:Tuple<Shape>, init:False|V3f, c:Config) :
-  val smashed-pcs = reverse $ to-list $ lazy-qsort({ area(dims(bounds(_))) }, seq(smash, pcs))
+public defn do-arranged (pcs:Tuple<Shape>, init:False|Shape, init-pos:False|V3f, c:Config) :
+  val smashed-pcs0 = reverse $ to-list $ lazy-qsort({ area(dims(bounds(_))) }, seq(smash, pcs))
+  val smashed-pcs = smashed-pcs0 when init is False else cons(init as Shape, smashed-pcs0)
   val grids = to-tuple $ seq(to-grid, pixeled(smashed-pcs, c))
   val sdims = xyz(to-v2i(*resolution* * (stock-dims(c) - 2.0f * stock-boundary(c)))) + V3i(0, 0, 1)
   ;; val sdims = to-v3i(*resolution* * stock-dims(c)) + V3i(0, 0, 1)
   val arrangement = Arrangement(sdims, 1.0f / *resolution*)
   println("STOCK DIMS %_ IDIMS %_ RES %_" % [stock-dims(c) stock-dims(arrangement) *resolution*])
-  val initi = V3i(0, 0) when init is False else idx-of(*resolution*, sdims, init as V3f)
-  println("INIT %_ = %_" % [init initi])
+  val initi = match(init-pos) :
+    (f:False) : V3i(0, 0)
+    (p:V3f)   : idx-of(stock-dim(arrangement), sdims, p - 0.5f * dims(bounds(init as Shape)))
+  println("INIT %_ = %_" % [init-pos initi])
   for (grid in grids, i in 0 to false) do :
     println-all(["ADDING " i " IDIMS " idims(grid)])
     add(arrangement, uniquify{_, arrangement} $ SuperPart(i, grid), initi)
@@ -598,14 +623,14 @@ public defn do-arranged (pcs:Tuple<Shape>, init:False|V3f, c:Config) :
   [arrangement, smashed-pcs, grids]
 
 public defn arranged-pixels (pcs:Tuple<Shape>, c:Config) :
-  val [arrangement, smashed-pcs, grids] = do-arranged(pcs, false, c)
+  val [arrangement, smashed-pcs, grids] = do-arranged(pcs, false, false, c)
   for (p in pages(arrangement), page-num in 0 to false) seq :
     to-pixels $ result(p)
 
-public defn arranged (pcs:Tuple<Shape>, c:Config) : arranged(pcs, false, c)
+public defn arranged (pcs:Tuple<Shape>, c:Config) : arranged(pcs, false, false, c)
 
-public defn arranged (pcs:Tuple<Shape>, init:False|V3f, c:Config) :
-  val [arrangement, smashed-pcs, grids] = do-arranged(pcs, init, c)
+public defn arranged (pcs:Tuple<Shape>, init:False|Shape, init-pos:False|V3f, c:Config) :
+  val [arrangement, smashed-pcs, grids] = do-arranged(pcs, init, init-pos, c)
   for (p in pages(arrangement), page-num in 0 to false) seq :
     group $ generate<Shape> :
       ;; val base-off = dim(result(p)) * V2f(1.0f, 1.0f) + stock-boundary(c)
@@ -620,7 +645,7 @@ public defn arranged (pcs:Tuple<Shape>, init:False|V3f, c:Config) :
           ;; yield(mov(xyz(off), smashed-pcs[pc-id]))
 
 defn do-sliced (pcs:Tuple<Shape>, c:Config) :
-  val pages = to-tuple $ arranged(pcs, false, c) ;; 
+  val pages = to-tuple $ arranged(pcs, false, false, c) ;; 
   ;; val pages = to-tuple $ nested(pcs, c)
   println-all([length(pages) " PAGES"])
   for page in pages seq :
