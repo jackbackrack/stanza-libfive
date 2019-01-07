@@ -286,13 +286,6 @@ public lostanza defn tree-render-mesh (t:ref<Tree>, box:ref<Box3f>, res:ref<Floa
   call-c libfive_mesh_delete(out)
   return mesh
 
-public lostanza defn tree-bounds (t:ref<Tree>) -> ref<Box3f> :
-  val out = call-c libfive_tree_bounds_star(t.value)
-  val res = Box3f(V3f(new Float{out.X.lower}, new Float{out.Y.lower}, new Float{out.Z.lower}),
-                  V3f(new Float{out.X.upper}, new Float{out.Y.upper}, new Float{out.Z.upper}))
-  call-c free(out)
-  return res
-
 lostanza defn copy-bytes (b:ref<ByteArray>, p:ref<LibfivePixels>, n:ref<Int>) -> ref<False> :
   call-c memcpy(addr!(b.data), p.value.data, n.value)
   return false
@@ -968,14 +961,14 @@ public defn to-mesh (s:Shape) -> Mesh :
   rgb(color(s), tree-render-mesh(tree(bt), fatten(bounds(s), xyz(eps)) & max-bounds(), *resolution*))
 
 public defn empty? (s:Shape) -> True|False :
-  val bt = jit(s) as BoundedTree
-  val bounds = tree-bounds(tree(bt))
-  empty?(bounds) or empty?(vertices(tree-render-mesh(tree(bt), bounds & max-bounds(), *resolution*)))
+  empty?(bounds(s)) or empty?(vertices(to-mesh(s)))
+
+public defn computed-bounds (s:Shape) -> Box3f :
+  bounds(to-mesh(s))
 
 public defn empty2? (s:Shape) -> True|False :
   val bt = jit(s) as BoundedTree
-  val bounds = xy(tree-bounds(tree(bt)))
-  empty?(bounds) or perimeter(slice(0.0f, s)) == 0.0f
+  empty?(xy(bounds(s))) or perimeter(slice(0.0f, s)) == 0.0f
 
 public defn intersects? (a:Shape, b:Shape) -> True|False :
   false when empty?(bounds(a) & bounds(b)) else not empty?(a & b)

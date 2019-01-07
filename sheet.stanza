@@ -100,13 +100,25 @@ public defn meld (poseables:Seqable<Poseable>) -> Seqable<Shape> :
   reduce(meld, seq(shapes, poseables))
 
 public defn square-tooth (i:Box3f, n-slots:Int) -> Shape :
-  val idx       = max-idx(dims(i))
-  val max-dim   = dims(i)[idx]
+  val max-dim   = dims(i)[max-idx(dims(i))]
   val slot-dim  = max-dim / to-float(n-slots)
   if slot-dim < (0.5f * dims(i)[min-idx(dims(i))] - EPS) :
     println(">>> SMALL-SLOT-DIM %_ MAX-DIM %_ MIN-DIM %_" % [slot-dim, max-dim, dims(i)[min-idx(dims(i))]])
   ;; cube(V3f(slot-dim, pos-inf-f, pos-inf-f))
-  cube(V3f(slot-dim, 2.0f * max-dim, 2.0f * max-dim))
+  ;; cube(V3f(slot-dim, 2.0f * max-dim, 2.0f * max-dim))
+  extrude(2.0f * max-dim, rect(slot-dim, 2.0f * max-dim))
+
+public defn press-square-tooth (i:Box3f, n-slots:Int) -> Shape :
+  val max-dim   = dims(i)[max-idx(dims(i))]
+  val slot-dim  = max-dim / to-float(n-slots)
+  if slot-dim < (0.5f * dims(i)[min-idx(dims(i))] - EPS) :
+    square-tooth(i, n-slots)
+  else :
+    val del = 0.05f
+    val [xr, yr, zd] = [0.5f * slot-dim, 0.5f * dims(i)[mid-idx(dims(i))] + EPS, dims(i)[min-idx(dims(i))]]
+    val poly = convex([V3f((- xr) + del, (- yr)), V3f((- xr) - del,    yr),
+                       V3f(   xr  + del,    yr),  V3f(   xr  - del, (- yr))])
+    extrude(zd, poly)
 
 public defn saw-tooth (i:Box3f, n-slots:Int) -> Shape :
   val idx       = max-idx(dims(i))
@@ -123,7 +135,7 @@ public defn get-even-teeth (i:Box3f, get-tooth:(Box3f, Int) -> Shape, i-n-slots:
   val max-dim   = dims(i)[idx]
   val n-slots   = i-n-slots when i-n-slots > 0 else (((to-int $ floor $ max-dim / slot-size) / 2) * 2 + 1)
   val num       = to-int $ round $ (to-float(n-slots) / 2.0f)
-  val stooth    = square-tooth(i, n-slots)
+  ;; val stooth    = square-tooth(i, n-slots)
   val tooth     = get-tooth(i, n-slots)
   defn gen-tooth (n:Int) : tooth ;; stooth when n == 0 or n == (num - 1) else tooth
   val teeth     = to-tuple $ seq(gen-tooth, 0 to num) 
@@ -133,6 +145,7 @@ public defn get-even-teeth (i:Box3f, get-tooth:(Box3f, Int) -> Shape, i-n-slots:
   ;; println-all(["N-SLOTS " n-slots " DIMS " dims(i) " MAX-IDX " idx " SLOT-DIM " slot-dim " CTRI " center(i) " TDIMS " dims(bounds(tooths))])
 
 public defn get-square-teeth (i:Box3f, n-slots:Int, slot-size:Float) :
+  ;; get-even-teeth(i, press-square-tooth, n-slots, slot-size)
   get-even-teeth(i, square-tooth, n-slots, slot-size)
 
 public defn get-square-teeth (i:Box3f, slot-size:Float) : get-square-teeth(i, 0, slot-size)
@@ -604,9 +617,14 @@ public defn pixeled (pcs:Seqable<Shape>, c:Config) :
   for pc in pcs seq :
     pixels(0.0f, smash(pc))
 
+public var *sort?*:True|False = false
+
 public defn do-arranged (pcs:Tuple<Shape>, init:False|Shape, init-pos:False|V3f, c:Config) :
-  val smashed-pcs0 = reverse $ to-list $ lazy-qsort({ area(dims(bounds(_))) }, seq(smash, pcs))
-  val smashed-pcs = smashed-pcs0 when init is False else cons(init as Shape, smashed-pcs0)
+  println("*SORT?* %_" % [*sort?*])
+  val smashed-pcs0 = seq(smash, pcs)
+  val smashed-pcs1 = lazy-qsort({ area(dims(bounds(_))) }, smashed-pcs0) when *sort?* else smashed-pcs0
+  val smashed-pcs2 = reverse $ to-list $ smashed-pcs1
+  val smashed-pcs = smashed-pcs2 when init is False else cons(init as Shape, smashed-pcs2)
   val grids = to-tuple $ seq(to-grid, pixeled(smashed-pcs, c))
   val sdims = xyz(to-v2i(*resolution* * (stock-dims(c) - 2.0f * stock-boundary(c)))) + V3i(0, 0, 1)
   ;; val sdims = to-v3i(*resolution* * stock-dims(c)) + V3i(0, 0, 1)
@@ -615,7 +633,7 @@ public defn do-arranged (pcs:Tuple<Shape>, init:False|Shape, init-pos:False|V3f,
   val initi = match(init-pos) :
     (f:False) : V3i(0, 0)
     (p:V3f)   : idx-of(stock-dim(arrangement), sdims, p - 0.5f * dims(bounds(init as Shape)))
-  println("INIT %_ = %_" % [init-pos initi])
+  ;; println("INIT %_ = %_" % [init-pos initi])
   for (grid in grids, i in 0 to false) do :
     println-all(["ADDING " i " IDIMS " idims(grid)])
     add(arrangement, uniquify{_, arrangement} $ SuperPart(i, grid), initi)
