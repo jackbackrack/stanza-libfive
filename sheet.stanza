@@ -568,12 +568,12 @@ public defstruct Config :
   sames : Tuple<[Int, Int, V3f]> 
   num-extras : Int
   
-public defn Config (n:Int, t:Float, stock-dims:V2f, stock-boundary:V2f, xy-quilt-dims:V2f, quilt-parity:Int) :
+public defn Config (n:Int, t:Float, m:Float, stock-dims:V2f, stock-boundary:V2f, xy-quilt-dims:V2f, quilt-parity:Int) :
   Config(n, t, stock-dims, stock-boundary, xy-quilt-dims, quilt-parity,
-         get-square-teeth{_, 5}, get-even-teeth{_, saw-tooth, 0, 1.0f * to-float(n) * t}, [], [], 0)
+         get-square-teeth{_, 5}, get-even-teeth{_, saw-tooth, 0, m * to-float(n) * t}, [], [], 0)
 
 public defn Config (n:Int, t:Float) :
-  Config(n, t, V2f(32.0f, 24.0f), V2f(0.25f, 0.25f), V2f(32.0f, 24.0f), 0)
+  Config(n, t, 1.0f, V2f(48.0f, 24.0f), V2f(0.25f, 0.25f), V2f(48.0f, 24.0f), 0)
 
 public defn Config () : Config(1, 0.280f)
 
@@ -617,7 +617,7 @@ public defn pixeled (pcs:Seqable<Shape>, c:Config) :
   for pc in pcs seq :
     pixels(0.0f, smash(pc))
 
-public var *sort?*:True|False = false
+public var *sort?*:True|False = true
 
 public defn do-arranged (pcs:Tuple<Shape>, init:False|Shape, init-pos:False|V3f, c:Config) :
   println("*SORT?* %_" % [*sort?*])
@@ -651,13 +651,14 @@ public defn arranged (pcs:Tuple<Shape>, init:False|Shape, init-pos:False|V3f, c:
   val [arrangement, smashed-pcs, grids] = do-arranged(pcs, init, init-pos, c)
   for (p in pages(arrangement), page-num in 0 to false) seq :
     group $ generate<Shape> :
-      ;; val base-off = dim(result(p)) * V2f(1.0f, 1.0f) + stock-boundary(c)
-      val base-off = xy(stock-boundary(c) - dim(result(p)) * V2f(1.0f, 1.0f))
       for (page-pose in poses(arrangement), pc-id in 0 to false) do :
         if page(page-pose) == page-num :
           val angle = angle(pose(page-pose))
           ;; val off = pt-of(result(p), translation(pose(page-pose))) + ctr-pt(rotate(angle, grids[pc-id])) + stock-boundary(c)
-          val off = base-off + pt-of(result(p), translation(pose(page-pose))) + ctr-pt(rotate(angle, grids[pc-id]))
+          val off = if pc-id == 0 and init-pos is V3f :
+              xy(init-pos as V3f)
+            else :
+              pt-of(result(p), translation(pose(page-pose))) + ctr-pt(rotate(angle, grids[pc-id]))
           ;; println-all(["IDX " translation(pose(page-pose)) " OFF " off " ROT " angle " BOUNDS " bounds(smashed-pcs[pc-id])])
           yield(mov(xyz(off), rot-z(to-float $ angle, smashed-pcs[pc-id])))
           ;; yield(mov(xyz(off), smashed-pcs[pc-id]))

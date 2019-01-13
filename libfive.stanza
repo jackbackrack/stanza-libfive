@@ -189,6 +189,14 @@ public defn Shape (fabber:(Vec3Field) -> FloField, bounds:Box3f, name:False|Symb
 public defn Shape (fabber:(Vec3Field) -> FloField, bounds:Box3f) :
   Shape(fabber, bounds, false, WHITE, [], [])
 
+public defn map (f:Shape -> Shape, m:Mat44f, p:Poseable) -> Poseable :
+  match(p) :
+    (a:Assembly) : Assembly(id-mat44f(), name(a), color(a), seq(map{f, mat(a) * m, _}, children(a)))
+    (s:Shape) : f(xyz(m, s))
+
+public defn map (f:Shape -> Shape, p:Poseable) -> Poseable :
+  map(f, id-mat44f(), p)
+
 defmethod clone (shape:Shape, state:AnyShapeState) -> Shape :
   Shape(fabber(shape), bounds(shape), state)
 
