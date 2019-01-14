@@ -11,6 +11,7 @@ defpackage sheet :
   import libfive
   import grid
   import nester
+  import clipper
 
 public var *explosion* = 0.25f
 
@@ -558,6 +559,7 @@ public defn all-forms () :
 public defstruct Config :
   n : Int
   ply-thickness : Float
+  kerf : Float
   stock-dims : V2f
   stock-boundary : V2f
   xy-quilt-dims : V2f
@@ -568,14 +570,14 @@ public defstruct Config :
   sames : Tuple<[Int, Int, V3f]> 
   num-extras : Int
   
-public defn Config (n:Int, t:Float, m:Float, stock-dims:V2f, stock-boundary:V2f, xy-quilt-dims:V2f, quilt-parity:Int) :
-  Config(n, t, stock-dims, stock-boundary, xy-quilt-dims, quilt-parity,
+public defn Config (n:Int, t:Float, kerf:Float, m:Float, stock-dims:V2f, stock-boundary:V2f, xy-quilt-dims:V2f, quilt-parity:Int) :
+  Config(n, t, kerf, stock-dims, stock-boundary, xy-quilt-dims, quilt-parity,
          get-square-teeth{_, 5}, get-even-teeth{_, saw-tooth, 0, m * to-float(n) * t}, [], [], 0)
 
-public defn Config (n:Int, t:Float) :
-  Config(n, t, 1.0f, V2f(48.0f, 24.0f), V2f(0.25f, 0.25f), V2f(48.0f, 24.0f), 0)
+public defn Config (n:Int, t:Float, kerf:Float) :
+  Config(n, t, kerf, 1.0f, V2f(48.0f, 24.0f), V2f(0.25f, 0.25f), V2f(48.0f, 24.0f), 0)
 
-public defn Config () : Config(1, 0.280f)
+public defn Config () : Config(1, 0.280f, 0.0f)
 
 public defn t (c:Config) : to-float(n(c)) * ply-thickness(c)
 public defn quilt-dims (c:Config) : xyz(xy-quilt-dims(c)) + V3f(0.0f, 0.0f, t(c) + 0.0001f)
@@ -671,7 +673,7 @@ defn do-sliced (pcs:Tuple<Shape>, c:Config) :
     val parts = union $ shapes $ page
     println-all(["  " dims(bounds(parts))])
     let-var *resolution* = 4.0f * *resolution* :
-      slice(0.0f, parts)
+      offset(slice(0.0f, parts), kerf(c))
 
 public defn sliced (pcs:Tuple<Shape>, c:Config) :
   for page in do-sliced(pcs, c) seq :
