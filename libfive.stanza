@@ -277,6 +277,24 @@ public lostanza defn tri-count (m:ref<LibfiveMesh>) -> ref<Int> :
 public lostanza defn vert-count (m:ref<LibfiveMesh>) -> ref<Int> :
   return new Int{m.value.vert-count}
 
+defn gc (m:Mesh) -> Mesh :
+  val used = Array<True|False>(length(vertices(m)), false)
+  for tri in faces(m) do :
+    for i in 0 to 3 do :
+      used[tri[i]] = true
+  val new-verts = to-tuple $ filter(vertices(m), used)
+  val mapping = Array<Int>(length(vertices(m)), -1)
+  let loop (idx:Int = 0, off:Int = 0) :
+    if idx < length(vertices(m)) :
+      if used[idx] :
+        mapping[idx] = idx - off
+        loop(idx + 1, off)
+      else :
+        loop(idx + 1, off + 1)
+  val new-tris = to-tuple $ for tri in faces(m) seq :
+    V3i(mapping[x(tri)], mapping[y(tri)], mapping[z(tri)])
+  Mesh(new-verts, new-tris)
+ 
 defn to-mesh (rm:LibfiveMesh) -> Mesh :
   ;; println-all(["STZ MESH COUNT " tri-count(rm)])
   val tris = to-tuple $ for ti in 0 to tri-count(rm) seq : get-vert-index(rm, ti)
@@ -285,7 +303,7 @@ defn to-mesh (rm:LibfiveMesh) -> Mesh :
   val verts = to-tuple $ for vi in 0 to vert-count(rm) seq : get-vert-value(rm, vi)
   ;; for (vert in verts, i in 0 to 4) do :
   ;;   println-all(["STZ VERT " i " " vert])
-  Mesh(verts, tris)
+  gc(Mesh(verts, tris))
 
 public lostanza defn tree-render-mesh (t:ref<Tree>, box:ref<Box3f>, res:ref<Float>) -> ref<Mesh> :
   val out = call-c libfive_tree_render_mesh_spread(t.value, x(lo(box)).value, x(hi(box)).value, y(lo(box)).value, y(hi(box)).value, z(lo(box)).value, z(hi(box)).value, res.value)
@@ -963,10 +981,35 @@ public defn save (filename:String, s:Shape) -> False :
   val eps = *resolution*
   tree-save-mesh(tree(bt), filename, fatten(bounds(s), xyz(eps)) & max-bounds(), *resolution*)
 
+;; var mcount = to-seq(0 to false)
+
+;;  val res = rgb(color(s), tree-render-mesh(tree(bt), fatten(bounds(s), xyz(eps)) & max-bounds(), *resolution*))
+
+public defn to-mesh (bt:BoundedTree) -> Mesh :
+  if mesh(bt) is False :
+    ;; val num = next(mcount)
+    ;; val filename = string-join(["part-" num ".tree"])
+    ;; tree-save(tree(bt), filename)
+    ;; val start-time = current-time-ms()
+    val eps = *resolution*
+    val s   = shape(bt)
+    val bds = fatten(bounds(s), xyz(eps)) & max-bounds()
+    val res = rgb(color(s), tree-render-mesh(tree(bt), bds, *resolution*))
+    ;; val bds = fatten(bounds(bt), xyz(*render-offset*))
+    ;; val res = tree-render-mesh(tree(bt), bds, *resolution*)
+    ;; val mesh-time = current-time-ms()
+    ;; println-all(["MESH-" num " " dims(bds) " RENDER " to-float(mesh-time - start-time) * 0.001f " SECS"])
+    ;; rgb(color(shape(bt)), res)
+    set-mesh(bt, res)
+    res
+  else :
+    mesh(bt) as Mesh
+
 public defn to-mesh (s:Shape) -> Mesh :
-  val bt = jit(s) as BoundedTree
-  val eps = *resolution*
-  rgb(color(s), tree-render-mesh(tree(bt), fatten(bounds(s), xyz(eps)) & max-bounds(), *resolution*))
+  if mesh(s) is False :
+    to-mesh(jit(s) as BoundedTree)
+  else :
+    mesh(s) as Mesh
 
 public defn empty? (s:Shape) -> True|False :
   empty?(bounds(s)) or empty?(vertices(to-mesh(s)))
@@ -975,7 +1018,6 @@ public defn computed-bounds (s:Shape) -> Box3f :
   bounds(to-mesh(s))
 
 public defn empty2? (s:Shape) -> True|False :
-  val bt = jit(s) as BoundedTree
   empty?(xy(bounds(s))) or perimeter(slice(0.0f, s)) == 0.0f
 
 public defn intersects? (a:Shape, b:Shape) -> True|False :

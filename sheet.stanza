@@ -15,11 +15,18 @@ defpackage sheet :
 
 public var *explosion* = 0.25f
 
+defn real-empty? (b:Box3f) -> True|False :
+  val d = dims(b)
+  x(d) <= 0.0f or y(d) <= 0.0f or z(d) <= 0.0f
+
+defn real? (b:Box3f) -> True|False :
+  not real-empty?(b)
+
 defn overlap? (a:Shape, b:Shape) -> True|False :
   val i = fatten(bounds(a) & bounds(b), xyz(EPS))
   val same-min? = min-idx(dims(bounds(a))) == min-idx(dims(bounds(b)))
   val mid = dims(i)[sorted-indices(dims(i))[1]]
-  val res = not empty?(i) and same-min? and mid > (min(dims(bounds(a))) * 0.5f)
+  val res = real?(i) and same-min? and mid > (min(dims(bounds(a))) * 0.5f)
   ;; println-all([" I " dims(i) " SAME-MIN? " same-min? " MID-I " mid " MIN-A " min(dims(bounds(a))) " RES = " res])
   res
 
@@ -199,7 +206,11 @@ public defn rot-mat44f (src0:Int, src1:Int, dst0:Int, dst1:Int) -> Mat44f :
   rot-mat44f(V3f-unit(src0), V3f-unit(src1), V3f-unit(dst0), V3f-unit(dst1))
 
 public defn join-two-pieces (a:Shape, b:Shape, get-teeth:Box3f -> Shape) -> [Shape, Shape] :
-  val i          = fatten(bounds(a) & bounds(b), xyz(EPS))
+  val rm         = to-mesh(a & b)
+  val ri         = bounds(rm)
+  ;; val ai         = bounds(a) & bounds(b)
+  ;; println("A %_ %_ B %_ %_ RI %_ %_ AI %_ %_" % [bounds(a) dims(bounds(a)) bounds(b) dims(bounds(b)) ri dims(ri) ai dims(ai)])
+  val i          = fatten(ri, xyz(EPS))
   val overlap    = box(i)
   val mid-idx    = mid-idx(dims(bounds(overlap)))
   val dir        = center(bounds(a))[mid-idx] - center(bounds(b))[mid-idx]
@@ -339,14 +350,14 @@ public defn join-pieces (elts:Seqable<Shape>, t:Float
   for i in 0 to length(pieces) do :
     for j in (i + 1) to length(pieces) do : 
       val [bi, bj] = [bounds(pieces[i]), bounds(pieces[j])]
-      if not empty?(bi & bj) :
+      if real?(bi & bj) :
         val dims = dims(bi & bj)
         val small = min(dims)
-        println(">>> SMALL %_ OVERLAP %_, %_" % [small, i, j]) when small < (t - EPS)
+        println(">>> SMALL %_ DIMS %_ OVERLAP %_, %_" % [small, dims, i, j]) when small < (t - EPS)
   for i in 0 to length(pieces) do :
     for j in (i + 1) to length(pieces) do : 
       val [bi, bj] = [bounds(pieces[i]), bounds(pieces[j])]
-      if not empty?(bi & bj) :
+      if real?(bi & bj) :
         val cap? = captured?(bi, bj)
         val get-teeth = if cap? :
             get-square-teeth{_, 2}
@@ -432,7 +443,7 @@ public defn split-overlaps (elts:Seqable<Shape>, t:Float) -> Seqable<Shape> :
             val [bi, bj] = [bounds(pieces[i]), bounds(pieces[j])]
             ;; println-all(["I " i " J " j " BI " bi " BJ " bj])
             val o = bi & bj
-            if not empty?(o) and volume(dims(o)) > 0.0f:
+            if real?(o) :
               ;; println-all(["CHECKING " i " AND " j " -> " o])
               if full-captured2d?(bi, bj) :
                 val [a, b] = split-full-overlap(pieces[i], pieces[j], t)
@@ -450,7 +461,7 @@ public defn split-overlaps (elts:Seqable<Shape>, t:Float) -> Seqable<Shape> :
   catch (e:AbuttFailure) :
     false
   ;; println-all(["  OUT " length(pieces)])
-  filter({ not empty?(bounds(_)) }, pieces)
+  filter({ real?(bounds(_)) }, pieces)
   ;; pieces
 
 ;; defn quilt-one (s:Shape, mx:Float, d0:Int, d1:Int, t:Float) -> Seqable<Shape> :
