@@ -4,7 +4,7 @@
 #include "libfive.h"
 #include "libfive/tree/opcode.hpp"
 #include "libfive/tree/tree.hpp"
-#include "libfive/tree/template.hpp"
+// #include "libfive/tree/template.hpp"
 #include "libfive/render/brep/region.hpp"
 #include "libfive/render/brep/contours.hpp"
 #include "libfive/render/brep/mesh.hpp"
