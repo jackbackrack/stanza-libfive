@@ -6,7 +6,3 @@ defregistry stanza-ao :
       dependency "${GEN}/libfive.o"
       link * ["${GEN}/libfive.o" "-lfive"]
   file "libfive-gfx.stanza"
-  file "libfive-eval.stanza"
-  file "libfive-repl.stanza"
-  file "eval-libfive-repl.stanza" gen :
-    package eval-libfive-repl
