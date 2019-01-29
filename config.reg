@@ -10,4 +10,3 @@ defregistry stanza-ao :
   file "libfive-repl.stanza"
   file "eval-libfive-repl.stanza" gen :
     package eval-libfive-repl
-  file "sheet.stanza"
