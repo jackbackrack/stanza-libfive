@@ -1,2 +1,2 @@
-# stanza-ao
-stanza interface to ao solid modeling
+# stanza-libfive
+stanza interface to libfive solid modeling
