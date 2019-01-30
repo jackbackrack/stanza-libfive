@@ -5,7 +5,7 @@ defpackage libfive :
   import utils
   import glu
   import geom
-  import grid
+  ;; import grid
 
 val @doc-libfive = "## LIBFIVE -- distance fields"
 
