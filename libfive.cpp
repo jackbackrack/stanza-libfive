@@ -1,3 +1,5 @@
+// See license.txt for details about licensing.
+
 #include <iostream>
 #include <fstream>
 

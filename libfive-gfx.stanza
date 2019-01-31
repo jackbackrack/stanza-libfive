@@ -1,3 +1,5 @@
+;; See license.txt for details about licensing.
+
 defpackage libfive-gfx :
   import core
   import math
