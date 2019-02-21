@@ -31,8 +31,11 @@ defmethod render (bt:BoundedTree) -> False :
   gl-push-attrib(GL-CURRENT-BIT)
   gl-color3f(1.0f, 0.5f, 0.5f)
   gl-point-size(20.0f)
-  for point in points(shape(bt)) do :
+  for pose in poses(shape(bt)) do :
+    val point  = value(pose) * V3f(0.0f, 0.0f, 0.0f)
+    val normal = value(pose) * V3f(0.0f, 0.0f, 0.1f)
     render(point)
+    render(normal)
   gl-pop-attrib()
 
 defmethod render (lay:TreeAssembly) -> False :
