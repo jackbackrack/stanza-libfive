@@ -698,7 +698,10 @@ public defn extrude (h:Float, shape:Shape) -> Shape :
 public defn extrude (h:Float) : extrude{h, _}
 
 public defmethod bit-or (a:Shape, b:Shape) -> Shape :
-  Shape(fn (p): min(fab(a, p), fab(b, p)), mat(a), bounds(a) | bounds(b), name(a, b), color(a, b), tags(a, b), poses(a, b))
+  val new-bounds = bounds(a) | bounds(b)
+  val delta = center(new-bounds) - center(bounds(a))
+  Shape(fn (p): min(fab(a, p), fab(b, p)),
+        mat(a) * mov-mat44f(delta), bounds(a) | bounds(b), name(a, b), color(a, b), tags(a, b), poses(a, b))
 
 public defn intersection (args:Seqable<Shape>) -> Shape :
   reduce(bit-and, args)
