@@ -177,7 +177,6 @@ public defn Shape (fabber:(Vec3Field) -> FloField, mat:Mat44f, bounds:Box3f, sta
   new Shape :
     defmethod bounds (this) : bounds
     defmethod state (this) : state
-    defmethod any-shapes (this) : [ this ]
     defmethod fabber (this) : fabber
     defmethod mat (this) : mat
     defmethod cache (this) : cache
@@ -931,8 +930,16 @@ defmethod jit-poseable (a:Assembly) -> TreeAssembly :
 
 public defn jit (g:Geom) -> Geom :
   match(g) :
-    (p:Shape|Assembly) : jit-poseable(p)
-    (geom) :             geom
+    (p:Shape) :    jit-poseable(p)
+    (a:Assembly) :
+      val shapes = to-tuple $ any-shapes $ a
+      println("JIT %_" % [shapes])
+      if all?({ _ is Shape }, shapes) :
+        println("JIT!")
+        jit-poseable(a)
+      else :
+        a
+    (geom) :       geom
 
 public var *max-bounds*:False|Box3f = false
 public defn max-bounds () :
