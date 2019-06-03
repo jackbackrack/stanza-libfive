@@ -86,7 +86,7 @@ extern libfive_tree_binary: (int, ptr<?>, ptr<?>) -> ptr<?>
 extern libfive_opcode_enum: (ptr<?>) -> int
 extern libfive_tree_delete: (ptr<?>) -> int
 extern libfive_tree_eval_f_spread: (ptr<?>, float, float, float) -> float
-extern libfive_tree_bounds_star: (ptr<?>) -> ptr<libfive_region3>
+;; extern libfive_tree_bounds_star: (ptr<?>) -> ptr<libfive_region3>
 extern libfive_tree_print: (ptr<?>) -> ptr<byte>
 extern libfive_tree_save: (ptr<?>, ptr<byte>) -> int
 extern libfive_tree_save_mesh_spread: (ptr<?>, float, float, float, float, float, float, float, ptr<byte>) -> int
