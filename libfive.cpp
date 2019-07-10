@@ -10,6 +10,7 @@
 #include "libfive/render/brep/region.hpp"
 #include "libfive/render/brep/contours.hpp"
 #include "libfive/render/brep/mesh.hpp"
+#include "libfive/render/brep/settings.hpp"
 #include "libfive/render/discrete/voxels.hpp"
 #include "libfive/render/discrete/heightmap.hpp"
 
@@ -58,7 +59,9 @@ libfive_pixels* libfive_tree_render_pixels_spread(libfive_tree tree, float lx, f
 bool libfive_tree_save_slice_spread(libfive_tree tree, float lx, float ux, float ly, float uy, float z,
                                  float res, const char* f) {
   Region<2> region({lx, ly}, {ux, uy}, Region<2>::Perp(z));
-  auto cs = Contours::render(*tree, region, 1/res);
+  BRepSettings settings;
+  settings.min_feature = 1/res;
+  auto cs = Contours::render(*tree, region, settings);
   cs->saveSVG(f);
   return 0;
 }
