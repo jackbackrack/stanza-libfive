@@ -739,6 +739,10 @@ defn rect (xmin:Float, ymin:Float, xmax:Float, ymax:Float) -> Shape :
   Shape(fn (p): max(max(lit(xmin) - x(p), x(p) - lit(xmax)), max(lit(ymin) - y(p), y(p) - lit(ymax))),
         Box3f(V3f(xmin, ymin, neg-inf-f), V3f(xmax, ymax, pos-inf-f)))
 
+public defn rect2 (box:Box2f) :
+  val dims = dims(box)
+  mov(xyz(center(box)), rect(x(dims), y(dims)))
+
 public defn edge (v0:V3f, v1:V3f) -> Shape :
   Shape(fn (p): lit(y(v1) - y(v0)) * (x(p) - lit(x(v0))) - lit(x(v1) - x(v0)) * (y(p) - lit(y(v0))),
         Box3f(v0) | Box3f(v1))
