@@ -116,31 +116,31 @@ public defstruct FloFieldLit <: FloField :
 
 defn lit? (f:FloField) -> True|False :
   match(f):
-  (l:FloFieldLit) : true
-  (o:FloFieldOp) : false
+    (l:FloFieldLit) : true
+    (o:FloFieldOp) : false
 
 defn lit? (f:FloField, v:Float) -> True|False :
   match(f):
-  (l:FloFieldLit) : value(l) == v
-  (o:FloFieldOp) : false
+    (l:FloFieldLit) : value(l) == v
+    (o:FloFieldOp) : false
 
 defn op? (f:FloField, name:String) -> True|False :
   match(f):
-  (l:FloFieldLit) : false
-  (o:FloFieldOp) : name == op(o)
+    (l:FloFieldLit) : false
+    (o:FloFieldOp) : name == op(o)
 
 defn op-args (f:FloField) -> List<FloField> :
   match(f):
-  (l:FloFieldLit) : List()
-  (o:FloFieldOp) : args(o)
+    (l:FloFieldLit) : List()
+    (o:FloFieldOp) : args(o)
 
 defn op-arg0 (f:FloField) -> FloField : op-args(f)[0]
 defn op-arg1 (f:FloField) -> FloField : op-args(f)[1]
 
 defn lit-value (f:FloField) -> Float :
   match(f):
-  (l:FloFieldLit) : value(l)
-  (o:FloFieldOp) : 0.0f
+    (l:FloFieldLit) : value(l)
+    (o:FloFieldOp) : 0.0f
 
 defmethod print (s:OutputStream, f:FloFieldLit) :
   print(s, "LIT(%_)" % [value(f)])
