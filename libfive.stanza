@@ -660,7 +660,7 @@ public defn revolve-y (s:Shape) -> Shape :
         Box3f(V3f((- xmx), y(lo(b)), (- xmx)), V3f(xmx, y(hi(b)), xmx)))
 
 public defn unrevolve-y (s:Shape) -> Shape :
-  with-xyz(mag-mat44f(V3f(2.0f * PI-F, 1.0f, 1.0f)), fn (p): Vec3Field(z(p) * cos(x(p)), y(p), z(p) * sin(x(p))), s)
+  with-xyz(mag-mat44f(V3f(PI-F, 1.0f, 1.0f)), fn (p): Vec3Field(z(p) * cos(x(p)), y(p), z(p) * sin(x(p))), s)
   ;; with-xyz(mag-mat44f(V3f(2.0f * PI-F, 1.0f, 1.0f)), fn (p): Vec3Field(atan2(x(p), z(p)), y(p), sqrt(sqr(x(p)) + sqr(z(p)))), s)
 
 public defn revolve-x (s:Shape) -> Shape :
@@ -670,7 +670,8 @@ public defn revolve-x (s:Shape) -> Shape :
         Box3f(V3f(x(lo(b)), (- ymx), (- ymx)), V3f(x(hi(b)), ymx, ymx)))
 
 public defn unrevolve-x (s:Shape) -> Shape :
-  with-xyz(mag-mat44f(V3f(1.0f, 2.0f * PI-F, 1.0f)), fn (p): Vec3Field(x(p), z(p) * cos(y(p)), z(p) * sin(y(p))), s)
+  with-xyz(mag-mat44f(V3f(1.0f, 1.0f, 1.0f)), fn (p): Vec3Field(x(p), z(p) * cos(y(p)), z(p) * sin(y(p))), s)
+  ;; mag-y(PI-F, with-xyz(id-mat44f(), fn (p): Vec3Field(x(p), z(p) * cos(y(p)), z(p) * sin(y(p))), s))
   ;; with-xyz(mag-mat44f(V3f(2.0f * PI-F, 1.0f, 1.0f)), fn (p): Vec3Field(x(p), atan2(y(p), z(p)), sqrt(sqr(y(p)) + sqr(z(p)))), s)
 
 ;; TODO : UPDATE BOUNDS
@@ -710,6 +711,11 @@ public defn bit-and (a:Shape, b:Shape) -> Shape :
   val delta = center(new-bounds) - center(bounds(a))
   Shape(fn (p): max(fab(a, p), fab(b, p)),
         mat(a) * mov-mat44f(delta), new-bounds, name(a, b), color(a, b), tags(a, b), poses(a, b))
+
+public defn intersect-using-mat-a (a:Shape, b:Shape) -> Shape :
+  val new-bounds = bounds(a)
+  Shape(fn (p): max(fab(a, p), fab(b, p)),
+        mat(a), new-bounds, name(a), color(a), tags(a), poses(a))
 
 public defn invert (s:Shape) -> Shape :
   Shape(fn (p): (- fab(s, p)), pos-inf-box3f())
