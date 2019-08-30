@@ -116,31 +116,31 @@ public defstruct FloFieldLit <: FloField :
 
 defn lit? (f:FloField) -> True|False :
   match(f):
-  (l:FloFieldLit) : true
-  (o:FloFieldOp) : false
+    (l:FloFieldLit) : true
+    (o:FloFieldOp) : false
 
 defn lit? (f:FloField, v:Float) -> True|False :
   match(f):
-  (l:FloFieldLit) : value(l) == v
-  (o:FloFieldOp) : false
+    (l:FloFieldLit) : value(l) == v
+    (o:FloFieldOp) : false
 
 defn op? (f:FloField, name:String) -> True|False :
   match(f):
-  (l:FloFieldLit) : false
-  (o:FloFieldOp) : name == op(o)
+    (l:FloFieldLit) : false
+    (o:FloFieldOp) : name == op(o)
 
 defn op-args (f:FloField) -> List<FloField> :
   match(f):
-  (l:FloFieldLit) : List()
-  (o:FloFieldOp) : args(o)
+    (l:FloFieldLit) : List()
+    (o:FloFieldOp) : args(o)
 
 defn op-arg0 (f:FloField) -> FloField : op-args(f)[0]
 defn op-arg1 (f:FloField) -> FloField : op-args(f)[1]
 
 defn lit-value (f:FloField) -> Float :
   match(f):
-  (l:FloFieldLit) : value(l)
-  (o:FloFieldOp) : 0.0f
+    (l:FloFieldLit) : value(l)
+    (o:FloFieldOp) : 0.0f
 
 defmethod print (s:OutputStream, f:FloFieldLit) :
   print(s, "LIT(%_)" % [value(f)])
@@ -243,6 +243,7 @@ public defstruct TreeAssembly <: AnyTree :
 
 public lostanza defn tree-delete (t:ref<Tree>) -> ref<False> :
   call-c libfive_tree_delete(t.value)
+  t.value = 0L as ptr<?>
   return false
 
 public lostanza defn tree-eval-f (t:ref<Tree>, p:ref<V3f>) -> ref<Float> :
@@ -278,24 +279,6 @@ public lostanza defn tri-count (m:ref<LibfiveMesh>) -> ref<Int> :
 
 public lostanza defn vert-count (m:ref<LibfiveMesh>) -> ref<Int> :
   return new Int{m.value.vert-count}
-
-defn gc (m:Mesh) -> Mesh :
-  val used = Array<True|False>(length(vertices(m)), false)
-  for tri in faces(m) do :
-    for i in 0 to 3 do :
-      used[tri[i]] = true
-  val new-verts = to-tuple $ filter(vertices(m), used)
-  val mapping = Array<Int>(length(vertices(m)), -1)
-  let loop (idx:Int = 0, off:Int = 0) :
-    if idx < length(vertices(m)) :
-      if used[idx] :
-        mapping[idx] = idx - off
-        loop(idx + 1, off)
-      else :
-        loop(idx + 1, off + 1)
-  val new-tris = to-tuple $ for tri in faces(m) seq :
-    V3i(mapping[x(tri)], mapping[y(tri)], mapping[z(tri)])
-  Mesh(new-verts, new-tris)
  
 defn to-mesh (rm:LibfiveMesh) -> Mesh :
   ;; println-all(["STZ MESH COUNT " tri-count(rm)])
@@ -312,6 +295,7 @@ public lostanza defn tree-render-mesh (t:ref<Tree>, box:ref<Box3f>, res:ref<Floa
   val c-mesh = new LibfiveMesh{out}
   val mesh = to-mesh(c-mesh)
   call-c libfive_mesh_delete(out)
+  c-mesh.value = 0L as ptr<libfive_mesh>
   return mesh
 
 lostanza defn copy-bytes (b:ref<ByteArray>, p:ref<LibfivePixels>, n:ref<Int>) -> ref<False> :
@@ -332,6 +316,7 @@ public lostanza defn tree-render-pixels (t:ref<Tree>, box:ref<Box3f>, res:ref<Fl
   val c-pixels = new LibfivePixels{out}
   val pixels = to-pixels(c-pixels, res)
   call-c libfive_pixels_delete(out)
+  c-pixels.value = 0L as ptr<libfive_pixels>
   return pixels
 
 lostanza defn get (contours:ref<LibfiveContours>, c:ref<Int>, i:ref<Int>) -> ref<V2f> :
@@ -358,6 +343,7 @@ public lostanza defn tree-render-slice (t:ref<Tree>, box:ref<Box3f>, res:ref<Flo
   val slice = new LibfiveContours{out}
   val poly = to-polygon(slice)
   call-c libfive_contours_delete(out)
+  slice.value = 0L as ptr<libfive_contours>
   return poly
 
 public lostanza defn fab-x () -> ref<FloField> :
@@ -745,6 +731,10 @@ defn rect (xmin:Float, ymin:Float, xmax:Float, ymax:Float) -> Shape :
   Shape(fn (p): max(max(lit(xmin) - x(p), x(p) - lit(xmax)), max(lit(ymin) - y(p), y(p) - lit(ymax))),
         Box3f(V3f(xmin, ymin, neg-inf-f), V3f(xmax, ymax, pos-inf-f)))
 
+public defn rect2 (box:Box2f) :
+  val dims = dims(box)
+  mov(xyz(center(box)), rect(x(dims), y(dims)))
+
 public defn edge (v0:V3f, v1:V3f) -> Shape :
   Shape(fn (p): lit(y(v1) - y(v0)) * (x(p) - lit(x(v0))) - lit(x(v1) - x(v0)) * (y(p) - lit(y(v0))),
         Box3f(v0) | Box3f(v1))
@@ -939,9 +929,9 @@ public defn jit (g:Geom) -> Geom :
     (p:Shape) :    jit-poseable(p)
     (a:Assembly) :
       val shapes = to-tuple $ any-shapes $ a
-      println("JIT %_" % [shapes])
+      ;; println("JIT %_" % [shapes])
       if all?({ _ is Shape }, shapes) :
-        println("JIT!")
+        ;; println("JIT!")
         jit-poseable(a)
       else :
         a
