@@ -50,7 +50,7 @@ lostanza deftype libfive_contours :
   count : int
 
 lostanza deftype LibfiveContours :
-  value : ptr<libfive_contours>
+  var value : ptr<libfive_contours>
 
 lostanza deftype libfive_mesh :
   verts : ptr<libfive_vec3>
@@ -59,7 +59,7 @@ lostanza deftype libfive_mesh :
   vert-count : int
 
 lostanza deftype LibfiveMesh :
-  value : ptr<libfive_mesh>
+  var value : ptr<libfive_mesh>
 
 lostanza deftype libfive_pixels :
   data : ptr<byte>
@@ -67,7 +67,7 @@ lostanza deftype libfive_pixels :
   height : int
 
 lostanza deftype LibfivePixels :
-  value : ptr<libfive_pixels>
+  var value : ptr<libfive_pixels>
 
 lostanza defn width (p:ref<LibfivePixels>) -> ref<Int> :
   return new Int{p.value.width}
@@ -101,7 +101,7 @@ extern printf: (ptr<?>, ? ...) -> int
 extern free: (ptr<?>) -> int
 
 public lostanza deftype Tree <: Geom :
-  value: ptr<?>
+  var value: ptr<?>
 
 defmethod print (o:OutputStream, t:Tree) :
   print-all(o, ["Tree()"])
@@ -701,6 +701,11 @@ public defn bit-and (a:Shape, b:Shape) -> Shape :
 public defn intersect-using-mat-a (a:Shape, b:Shape) -> Shape :
   val new-bounds = bounds(a)
   Shape(fn (p): max(fab(a, p), fab(b, p)),
+        mat(a), new-bounds, name(a), color(a), tags(a), poses(a))
+
+public defn union-using-mat-a (a:Shape, b:Shape) -> Shape :
+  val new-bounds = bounds(a)
+  Shape(fn (p): min(fab(a, p), fab(b, p)),
         mat(a), new-bounds, name(a), color(a), tags(a), poses(a))
 
 public defn invert (s:Shape) -> Shape :
