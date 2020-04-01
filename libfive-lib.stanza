@@ -1,0 +1,172 @@
+defpackage libfive/lib :
+  import core
+  import math
+  import geom/angle
+  import geom/vec
+  import geom/mat
+  import geom/box
+  import geom/bounded
+  import geom/poseable
+  import geom/shape
+  import geom/polygon
+  import geom/mesh
+  import geom/plane
+  import geom/assembly
+  import gfx/glu
+  import libfive/core
+  import libfive/field
+  import libfive/shape
+
+public defn rect (w:Float, h:Float) -> Shape :
+  rect(dim-min(w), dim-min(h), dim-max(w), dim-max(h))
+
+public defn rect (v0:V2f, v1:V2f, d:Float) -> Shape :
+  val v = v1 - v0
+  val a = atan2(y(v),x(v))
+  mov(xyz(0.5f * (v0 + v1)), rot-z(radians-to-degrees(a), rect(magnitude(v) + d, d)))
+
+public defn square (d:Float) -> Shape :
+  rect(d, d)
+
+;;; DEPRECATE
+defn cube (xmin:Float, ymin:Float, zmin:Float, xmax:Float, ymax:Float, zmax:Float) -> Shape :
+  extrude(zmin, zmax, rect(xmin, ymin, xmax, ymax))
+
+;;; DEPRECATE
+public defn cube (w:Float, h:Float, d:Float) -> Shape :
+  cube(dim-min(w), dim-min(h), dim-min(d), dim-max(w), dim-max(h), dim-max(d))
+
+public defn cube (d:Float) -> Shape :
+  cube(d, d, d)
+
+public defn cube (xy:Float, z:Float) -> Shape :
+  cube(xy, xy, z)
+
+public defn cube (v:V3f) -> Shape :
+  cube(x(v), y(v), z(v))
+
+;; public defn box (dims:V3f) -> Shape :
+;;   defn fab (p) :
+;;     val d = abs(p) - lit(0.5f * dims)
+;;     min(max(x(d),max(y(d),z(d))),lit(0.0)) + len(max(d,lit(0.0)))  
+;;   Shape(fab, dims-to-box(dims))
+
+public defn box (b:Box3f) -> Shape :
+  cube(x(lo(b)), y(lo(b)), z(lo(b)), x(hi(b)), y(hi(b)), z(hi(b)))
+
+public defn cylinder (d:Float, h:Float) -> Shape :
+  extrude(h, circle(d))
+
+;; TODO: BROKEN
+;; public defn box (dims:V3f) -> Shape :
+;;   defn fab (p) : len(max(abs(p) - lit(0.5f * dims), lit(0.0)))
+;;   Shape(fab, dims-to-box(dims))
+
+;; TODO: BROKEN
+;; public defn round-box (dims:V3f, r:Float) -> Shape :
+;;   offset(box(dims), r)
+
+;; public defn capsule (a:V3f, b:V3f, d:Float) -> Shape :
+;;   val r  = 0.5f * d
+;;   defn fab (p) :
+;;     val pa = p - lit(a)
+;;     val ba = b - a
+;;     val h  = clamp(dot(pa, lit(ba)) / lit(dot(ba, ba)), lit(0.0), lit(1.0))
+;;     len(pa - h * lit(ba)) - lit(r)
+;;   Shape(fab, fatten(Box3f(a, a) | Box3f(b, b), r))
+
+public defn capsule3 (d:Float, h:Float) -> Shape :
+  val r = 0.5f * h
+  cylinder(d, h) | mov-z(r, sphere(d)) | mov-z((- r), sphere(d))
+
+public defn capsule2 (d:Float, w:Float) -> Shape :
+  val r = 0.5f * w
+  rect(w, d) | mov-x(r, circle(d)) | mov-x((- r), circle(d))
+
+public defn capsule (a:V3f, b:V3f, d:Float) -> Shape :
+  pose-to-points(a, b) $ capsule3(d, magnitude(b - a))
+
+public defn capsule (a:V2f, b:V2f, d:Float) -> Shape :
+  pose-to-points(a, b) $ capsule2(d, magnitude(b - a))
+
+;; public defn capsule (a:V3f, b:V3f, d:Float) -> Shape :
+;;   val r  = 0.5f * d
+;;   defn fab (p) :
+;;     val pa = p - lit(a)
+;;     val ba = b - a
+;;     val h  = clamp(dot(pa, lit(ba)) / lit(dot(ba, ba)), lit(0.0), lit(1.0))
+;;     len(pa - h * lit(ba)) - lit(r)
+;;     ;; len(pa - h * lit(ba)) - lit(r)
+;;   Shape(fab, fatten(Box3f(a, a) | Box3f(b, b), xyz(r)))
+
+;; public defn capsule2 (a:V3f, b:V3f, d:Float) -> Shape :
+;;   val r  = 0.5f * d
+;;   defn fab (p) :
+;;     val pa = xy(p) - lit(a)
+;;     val ba = b - a
+;;     val h  = clamp(dot(pa, lit(ba)) / lit(dot(ba, ba)), lit(0.0), lit(1.0))
+;;     len(pa - h * lit(ba)) - lit(r)
+;;   Shape(fab, fatten(Box3f(a, a) | Box3f(b, b), r))
+
+public defn cone (d:Float, h:Float) -> Shape :
+  Shape(taper-xy-z(h, 1.0f, 0.0f, cylinder(d, h)),
+        dims-to-box(V3f(d, d, h)))
+
+public defn pyramid (d:Float, h:Float) -> Shape :
+  Shape(taper-xy-z(h, 1.0f, 0.0f, extrude(h, rect(d, d))),
+        dims-to-box(V3f(d, d, h)))
+
+public defn torus (D:Float, d:Float) -> Shape :
+  Shape(fn (p): len(Vec2Field(lit(D * 0.5f) - len(xy(p)), z(p))) - lit(d * 0.5f),
+        dims-to-box(V3f(D + d, D + d, d)))
+
+public defn to-shape (m:Mesh) -> Shape :
+  val verts = vertices(m)
+  union(for face in faces(m) seq :
+          triangle(verts[face[0]], verts[face[1]], verts[face[2]]))
+
+public defn to-shape (p:Polygon) -> Shape :
+  to-shape(triangulate(p))
+
+public defn triangle (a:V3f, b:V3f, c:V3f) -> Shape :
+  convex([a, b, c])
+
+defn rect (xmin:Float, ymin:Float, xmax:Float, ymax:Float) -> Shape :
+  val b = Box3f(V3f(xmin, ymin, neg-inf-f), V3f(xmax, ymax, pos-inf-f))
+  Shape(fn (p): max(max(lit(xmin) - x(p), x(p) - lit(xmax)), max(lit(ymin) - y(p), y(p) - lit(ymax))),
+        Box3f(V3f(xmin, ymin, neg-inf-f), V3f(xmax, ymax, pos-inf-f)))
+
+public defn rect2 (box:Box2f) :
+  val dims = dims(box)
+  mov(xyz(center(box)), rect(x(dims), y(dims)))
+
+public defn circle (d:Float) -> Shape :
+  val r = d * 0.5f
+  Shape(fn (p): len(xy(p)) - lit(r), Box3f(V3f((- r), (- r), neg-inf-f), V3f(r, r, pos-inf-f)))
+
+;; public defn circle (x:FloField, y:FloField, r:FloField) -> FloField :
+;;   mov(x, y, {circle(r)})
+
+public defn sphere (d:Float) -> Shape :
+  val r = d * 0.5f
+  Shape(fn (p): len(p) - lit(r), Box3f(V3f((- r), (- r), (- r)), V3f(r, r, r)))
+
+;; public defn sphere (x:FloField, y:FloField, z:FloField, r:FloField) -> FloField :
+;;   mov(x, y, z, {circle(r)})
+
+public defn halfspace (n:V3f) -> Shape :
+  Shape(fn (p): dot(lit(n), p), pos-inf-box3f())
+
+public defn trim (s:Shape, p:Plane) -> Shape :
+  val res = intersect-using-mat-a(s, mov(center(p), halfspace(normal(p))))
+  Shape(fabber(res), mat(s), bounds(s), state(s))
+
+public defn cylinder (a:V3f, b:V3f, d:Float) -> Shape :
+  pose-to-points(a, b) $ cylinder(d, magnitude(b - a))
+
+public defn bulk-rem (p:Poseable, c:Shape) :
+  map(rem{_, c}, p)
+
+public defn bulk-rem (shapes:Tuple<Shape>, c:Shape) :
+  bulk-rem(group $ shapes, c)
+

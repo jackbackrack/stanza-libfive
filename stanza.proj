@@ -1,7 +1,10 @@
-package libfive defined-in "libfive.stanza"
-package libfive requires :
+package libfive/core defined-in "libfive-core.stanza"
+package libfive/field defined-in "libfive-field.stanza"
+package libfive/shape defined-in "libfive-shape.stanza"
+package libfive/lib defined-in "libfive-lib.stanza"
+package libfive/core requires :
   ccfiles : "{WORKDIR}/build/libfive.o"
   ccflags : "-lfive"
-package libfive-gfx defined-in "libfive-gfx.stanza"
+package libfive/gfx defined-in "libfive-gfx.stanza"
 compile file "{WORKDIR}/build/libfive.o" from "libfive.cpp" :
   "g++ -std=c++11 -I/usr/local/include/eigen3 -c {.}/libfive.cpp -o {WORKDIR}/build/libfive.o"

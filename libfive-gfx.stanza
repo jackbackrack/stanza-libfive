@@ -1,15 +1,16 @@
 ;; See license.txt for details about licensing.
 
-defpackage libfive-gfx :
+defpackage libfive/gfx :
   import core
   import math
   import collections
-  import libfive
-  import gl
-  import font
-  import gfx
-  import geom
-  import geom-gfx
+  import libfive/core
+  import gfx/gl
+  import gfx/font
+  import gfx/drawing
+  import geom/vec
+  import geom/box
+  import geom/gfx
 
 defmethod render (bt:BoundedTree) -> False :
   ;; TODO MAKE PARAMETERIZABLE

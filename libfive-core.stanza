@@ -1,0 +1,228 @@
+defpackage libfive/core :
+  import core
+  import math
+  import collections
+  import utils/math
+  import utils/basic
+  import gfx/glu
+  import geom/angle
+  import geom/vec
+  import geom/mat
+  import geom/box
+  import geom/mesh
+  import geom/polygon
+  import geom/pixels
+  import geom/geom
+  import geom/bounded
+  import geom/poseable
+  import geom/assembly
+  import geom/shape
+  import geom/space
+  import libfive/field
+  ; import geom/line-segment
+  ; import geom/polyline
+  ; import geom/bounded
+  ; import geom/poseable
+  ; import geom/assembly
+  ; import geom/shape
+  ; import geom/space
+
+val @doc-libfive = "## LIBFIVE -- distance fields"
+
+lostanza deftype libfive_interval :
+  lower : float
+  upper : float
+
+lostanza deftype libfive_region2 :
+  X : libfive_interval
+  Y : libfive_interval
+
+lostanza deftype libfive_region3 :
+  X : libfive_interval
+  Y : libfive_interval
+  Z : libfive_interval
+
+lostanza deftype libfive_vec2 :
+  x : float
+  y : float
+
+lostanza deftype libfive_vec3 :
+  x : float
+  y : float
+  z : float
+
+lostanza deftype libfive_vec4 :
+  x : float
+  y : float
+  z : float
+  w : float
+
+lostanza deftype libfive_tri :
+  a : int
+  b : int
+  c : int
+
+lostanza deftype libfive_contour :
+  pts : ptr<libfive_vec2>
+  count : int
+
+lostanza deftype libfive_contours :
+  cs : ptr<libfive_contour>
+  count : int
+
+lostanza deftype LibfiveContours :
+  var value : ptr<libfive_contours>
+
+lostanza deftype libfive_mesh :
+  verts : ptr<libfive_vec3>
+  tris : ptr<libfive_tri>
+  tri-count : int
+  vert-count : int
+
+lostanza deftype LibfiveMesh :
+  var value : ptr<libfive_mesh>
+
+lostanza deftype libfive_pixels :
+  data : ptr<byte>
+  width : int
+  height : int
+
+lostanza deftype LibfivePixels :
+  var value : ptr<libfive_pixels>
+
+lostanza defn width (p:ref<LibfivePixels>) -> ref<Int> :
+  return new Int{p.value.width}
+
+lostanza defn height (p:ref<LibfivePixels>) -> ref<Int> :
+  return new Int{p.value.height}
+
+extern memcpy: (ptr<byte>, ptr<byte>, int) -> ptr<byte>
+
+extern libfive_tree_delete: (ptr<?>) -> int
+extern libfive_tree_eval_f_spread: (ptr<?>, float, float, float) -> float
+;; extern libfive_tree_bounds_star: (ptr<?>) -> ptr<libfive_region3>
+extern libfive_tree_print: (ptr<?>) -> ptr<byte>
+extern libfive_tree_save: (ptr<?>, ptr<byte>) -> int
+extern libfive_tree_save_mesh_spread: (ptr<?>, float, float, float, float, float, float, float, ptr<byte>) -> int
+extern libfive_tree_save_slice_spread: (ptr<?>, float, float, float, float, float, float, ptr<byte>) -> int
+extern libfive_tree_render_mesh_spread: (ptr<?>, float, float, float, float, float, float, float) -> ptr<libfive_mesh>
+extern libfive_tree_render_slice_spread: (ptr<?>, float, float, float, float, float, float) -> ptr<libfive_contours>
+extern libfive_tree_render_pixels_spread: (ptr<?>, float, float, float, float, float, float) -> ptr<libfive_pixels>
+extern libfive_contours_delete: (ptr<libfive_contours>) -> int
+extern libfive_mesh_delete: (ptr<libfive_mesh>) -> int
+extern libfive_pixels_delete: (ptr<libfive_pixels>) -> int
+extern printf: (ptr<?>, ? ...) -> int
+extern free: (ptr<?>) -> int
+
+public lostanza deftype Tree <: Geom :
+  var value: ptr<?>
+
+defmethod print (o:OutputStream, t:Tree) :
+  print-all(o, ["Tree()"])
+
+
+public lostanza defn tree-delete (t:ref<Tree>) -> ref<False> :
+  call-c libfive_tree_delete(t.value)
+  t.value = 0L as ptr<?>
+  return false
+
+public lostanza defn tree-eval-f (t:ref<Tree>, p:ref<V3f>) -> ref<Float> :
+  val res = call-c libfive_tree_eval_f_spread(t.value, x(p).value, y(p).value, z(p).value)
+  return new Float{res}
+
+public lostanza defn tree-print (t:ref<Tree>) -> ref<String> :
+  val res = call-c libfive_tree_print(t.value)
+  return String(res)
+
+public lostanza defn tree-save (t:ref<Tree>, filename:ref<String>) -> ref<False> :
+  call-c libfive_tree_save(t.value, addr!(filename.chars))
+  return false
+
+public lostanza defn tree-save-mesh (t:ref<Tree>, filename:ref<String>, box:ref<Box3f>, res:ref<Float>) -> ref<False> :
+  call-c libfive_tree_save_mesh_spread(t.value, x(lo(box)).value, x(hi(box)).value, y(lo(box)).value, y(hi(box)).value, z(lo(box)).value, z(hi(box)).value, res.value, addr!(filename.chars))
+  return false
+
+public lostanza defn tree-save-slice (t:ref<Tree>, filename:ref<String>, box:ref<Box3f>, res:ref<Float>) -> ref<False> :
+  call-c libfive_tree_save_slice_spread(t.value, x(lo(box)).value, x(hi(box)).value, y(lo(box)).value, y(hi(box)).value, z(lo(box)).value, res.value, addr!(filename.chars))
+  return false
+
+public lostanza defn get-vert-value (m:ref<LibfiveMesh>, i:ref<Int>) -> ref<V3f> :
+  val vert = m.value.verts[i.value]
+  return V3f(new Float{vert.x}, new Float{vert.y}, new Float{vert.z})
+
+public lostanza defn get-vert-index (m:ref<LibfiveMesh>, i:ref<Int>) -> ref<V3i> :
+  val tri = m.value.tris[i.value]
+  return V3i(new Int{tri.a}, new Int{tri.b}, new Int{tri.c})
+
+public lostanza defn tri-count (m:ref<LibfiveMesh>) -> ref<Int> :
+  return new Int{m.value.tri-count}
+
+public lostanza defn vert-count (m:ref<LibfiveMesh>) -> ref<Int> :
+  return new Int{m.value.vert-count}
+ 
+defn to-mesh (rm:LibfiveMesh) -> Mesh :
+  ;; println-all(["STZ MESH COUNT " tri-count(rm)])
+  val tris = to-tuple $ for ti in 0 to tri-count(rm) seq : get-vert-index(rm, ti)
+  ;; for (tri in tris, i in 0 to 4) do :
+  ;;   println-all(["STZ TRI " tri])
+  val verts = to-tuple $ for vi in 0 to vert-count(rm) seq : get-vert-value(rm, vi)
+  ;; for (vert in verts, i in 0 to 4) do :
+  ;;   println-all(["STZ VERT " i " " vert])
+  gc(Mesh(verts, tris))
+
+public lostanza defn tree-render-mesh (t:ref<Tree>, box:ref<Box3f>, res:ref<Float>) -> ref<Mesh> :
+  val out = call-c libfive_tree_render_mesh_spread(t.value, x(lo(box)).value, x(hi(box)).value, y(lo(box)).value, y(hi(box)).value, z(lo(box)).value, z(hi(box)).value, res.value)
+  val c-mesh = new LibfiveMesh{out}
+  val mesh = to-mesh(c-mesh)
+  call-c libfive_mesh_delete(out)
+  c-mesh.value = 0L as ptr<libfive_mesh>
+  return mesh
+
+lostanza defn copy-bytes (b:ref<ByteArray>, p:ref<LibfivePixels>, n:ref<Int>) -> ref<False> :
+  call-c memcpy(addr!(b.data), p.value.data, n.value)
+  return false
+
+defn to-pixels (p:LibfivePixels, res:Float) -> Pixels :
+  val width = width(p)
+  val height = height(p)
+  val tot = width * height
+  ;; println-all(["WIDTH " width " HEIGHT " height " NUM " tot])
+  val data = ByteArray(tot)
+  copy-bytes(data, p, tot)
+  Pixels(V3i(width, height, 1), 1.0f / res, data)
+
+public lostanza defn tree-render-pixels (t:ref<Tree>, box:ref<Box3f>, res:ref<Float>) -> ref<Pixels> :
+  val out = call-c libfive_tree_render_pixels_spread(t.value, x(lo(box)).value, x(hi(box)).value, y(lo(box)).value, y(hi(box)).value,  z(lo(box)).value, res.value)
+  val c-pixels = new LibfivePixels{out}
+  val pixels = to-pixels(c-pixels, res)
+  call-c libfive_pixels_delete(out)
+  c-pixels.value = 0L as ptr<libfive_pixels>
+  return pixels
+
+lostanza defn get (contours:ref<LibfiveContours>, c:ref<Int>, i:ref<Int>) -> ref<V2f> :
+  val contour = contours.value.cs[c.value]
+  val pt      = contour.pts[i.value]
+  return V2f(new Float{pt.x}, new Float{pt.y})
+
+lostanza defn get-contour-size (contours:ref<LibfiveContours>, i:ref<Int>) -> ref<Int> :
+  val contour = contours.value.cs[i.value]
+  return new Int{contour.count}
+
+lostanza defn num-contours (cs:ref<LibfiveContours>) -> ref<Int> :
+  return new Int{cs.value.count}
+
+defn to-polygon (cs:LibfiveContours) -> Polygon :
+  val contours =
+    for ci in 0 to num-contours(cs) seq :
+      val points = for j in (get-contour-size(cs, ci) - 2) through 0 by -1 seq : cs[ci, j]
+      Contour(to-tuple $ points)
+  Polygon(to-tuple $ contours)
+
+public lostanza defn tree-render-slice (t:ref<Tree>, box:ref<Box3f>, res:ref<Float>) -> ref<Polygon> :
+  val out = call-c libfive_tree_render_slice_spread(t.value, x(lo(box)).value, x(hi(box)).value, y(lo(box)).value, y(hi(box)).value, z(lo(box)).value, res.value)
+  val slice = new LibfiveContours{out}
+  val poly = to-polygon(slice)
+  call-c libfive_contours_delete(out)
+  slice.value = 0L as ptr<libfive_contours>
+  return poly
+

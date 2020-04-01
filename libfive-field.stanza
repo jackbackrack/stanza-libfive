@@ -1,0 +1,286 @@
+defpackage libfive/field :
+  import core
+  import math
+  import utils/math
+  import geom/vec
+  import geom/box
+  import geom/mat
+  import libfive/core
+
+extern libfive_tree_x: () -> ptr<?>
+extern libfive_tree_y: () -> ptr<?>
+extern libfive_tree_z: () -> ptr<?>
+extern libfive_tree_const: (float) -> ptr<?>
+extern libfive_tree_unary: (int, ptr<?>) -> ptr<?>
+extern libfive_tree_binary: (int, ptr<?>, ptr<?>) -> ptr<?>
+extern libfive_opcode_enum: (ptr<?>) -> int
+
+public deftype FloField <: Equalable
+public defmulti tree (f:FloField) -> Tree
+public defmulti count (f:FloField) -> Int
+
+public defstruct FloFieldLit <: FloField :
+  tree: Tree with: (as-method => true)
+  value: Float
+
+defn lit? (f:FloField) -> True|False :
+  match(f):
+    (l:FloFieldLit) : true
+    (o:FloFieldOp) : false
+
+defn lit? (f:FloField, v:Float) -> True|False :
+  match(f):
+    (l:FloFieldLit) : value(l) == v
+    (o:FloFieldOp) : false
+
+defn op? (f:FloField, name:String) -> True|False :
+  match(f):
+    (l:FloFieldLit) : false
+    (o:FloFieldOp) : name == op(o)
+
+defn op-args (f:FloField) -> List<FloField> :
+  match(f):
+    (l:FloFieldLit) : List()
+    (o:FloFieldOp) : args(o)
+
+defn op-arg0 (f:FloField) -> FloField : op-args(f)[0]
+defn op-arg1 (f:FloField) -> FloField : op-args(f)[1]
+
+defn lit-value (f:FloField) -> Float :
+  match(f):
+    (l:FloFieldLit) : value(l)
+    (o:FloFieldOp) : 0.0f
+
+defmethod print (s:OutputStream, f:FloFieldLit) :
+  print(s, "LIT(%_)" % [value(f)])
+
+defmethod equal? (a:FloFieldLit, b:FloFieldLit) -> True|False :
+  value(a) == value(b)
+
+defmethod count (a:FloFieldLit) -> Int :
+  1
+
+public defstruct FloFieldOp <: FloField :
+  tree: Tree with: (as-method => true)
+  op: String
+  args: List<FloField>
+
+defmethod print (s:OutputStream, f:FloFieldOp) :
+  print(s, "%_(%,)" % [op(f), args(f)])
+
+defmethod equal? (a:FloFieldOp, b:FloFieldOp) -> True|False :
+  op(a) == op(b) and all?(equal?, args(a), args(b))
+
+defmethod count (f:FloFieldOp) -> Int :
+  1 + reduce(i+, 0, seq(count, args(f)))
+
+public lostanza defn fab-x () -> ref<FloField> :
+  return FloFieldOp(new Tree{call-c libfive_tree_x()}, String("X"), List())
+public lostanza defn fab-y () -> ref<FloField> :
+  return FloFieldOp(new Tree{call-c libfive_tree_y()}, String("Y"), List())
+public lostanza defn fab-z () -> ref<FloField> :
+  return FloFieldOp(new Tree{call-c libfive_tree_z()}, String("Z"), List())
+public lostanza defn lit (f:ref<Float>) -> ref<FloField> :
+  return FloFieldLit(new Tree{call-c libfive_tree_const(f.value)}, f)
+public lostanza defn lit (f:ref<Double>) -> ref<FloField> :
+  return lit(to-float(f))
+public lostanza defn opcode (name:ref<String>) -> ref<Int> :
+  return new Int{call-c libfive_opcode_enum(addr!(name.chars))}
+public lostanza defn unary (op:ref<String>, t:ref<FloField>) -> ref<FloField> :
+  return FloFieldOp(new Tree{call-c libfive_tree_unary(opcode(op).value, tree(t).value)}, op, List(t))
+public lostanza defn binary (op:ref<String>, t1:ref<FloField>, t2:ref<FloField>) -> ref<FloField> :
+  return FloFieldOp(new Tree{call-c libfive_tree_binary(opcode(op).value, tree(t1).value, tree(t2).value)}, op, List(t1, t2))
+public defn min-lit () : lit(neg-inf-f)
+public defn max-lit () : lit(pos-inf-f)
+
+public defn nan-fill (x:FloField, y:FloField) -> FloField : binary("nan-fill", x, y)
+public defn modulo (x:FloField, y:FloField) -> FloField :
+  if lit?(x) and lit?(y): lit(modulo(lit-value(x), lit-value(y)))
+  else : binary("mod", x, y)
+public defn times (x:FloField, y:FloField) -> FloField : 
+  if lit?(x) and lit?(y): lit(times(lit-value(x), lit-value(y)))
+  else if lit?(x, 1.0f): y else if lit?(y, 1.0f): x 
+  else if lit?(x, 0.0f) or lit?(y, 0.0f): lit(0.0f)
+  else : binary("mul", x, y)
+public defn min (x:FloField, y:FloField) -> FloField : 
+  if lit?(x) and lit?(y): lit(min(lit-value(x), lit-value(y)))
+  else if lit?(y) and lit-value(y) >= pos-inf-f: x
+  else if lit?(x) and lit-value(x) >= pos-inf-f: y
+  else : binary("min", x, y)
+public defn max (x:FloField, y:FloField) -> FloField :
+  if lit?(x) and lit?(y): lit(max(lit-value(x), lit-value(y)))
+  else if lit?(y) and lit-value(y) <= pos-inf-f: x
+  else if lit?(x) and lit-value(x) <= pos-inf-f: y
+  else : binary("max", x, y)
+public defn divide (x:FloField, y:FloField) -> FloField : 
+  if lit?(x) and lit?(y): lit(divide(lit-value(x), lit-value(y)))
+  else if lit?(y, 1.0f): x 
+  else if lit?(x, 0.0f): x
+  else : binary("div", x, y)
+public defn plus (x:FloField, y:FloField) -> FloField :
+  if lit?(x) and lit?(y): lit(plus(lit-value(x), lit-value(y)))
+  else if lit?(x, 0.0f): y else if lit?(y, 0.0f): x
+  else if lit?(x) and op?(y, "add") and lit?(op-arg1(y)) : op-arg0(y) + lit(lit-value(x) + lit-value(op-arg1(y))) ;; add(lx, add(y, ly)) = add(y, lx + ly)
+  else if lit?(x) and op?(y, "sub") and lit?(op-arg1(y)) : op-arg0(y) + lit(lit-value(x) - lit-value(op-arg1(y))) ;; add(lx, sub(y, ly)) = add(y, lx - ly)
+  else if lit?(y) and op?(x, "add") and lit?(op-arg1(x)) : op-arg0(x) + lit(lit-value(op-arg1(x)) + lit-value(y)) ;; add(add(x, lx), ly) = add(x, lx + ly)
+  else if lit?(y) and op?(x, "sub") and lit?(op-arg1(x)) : op-arg0(x) + lit(lit-value(y) - lit-value(op-arg1(x))) ;; add(sub(x, lx), ly) = add(x, ly - lx)
+  else : binary("add", x, y)
+public defn minus (x:FloField, y:FloField) -> FloField : 
+  if lit?(x) and lit?(y): lit(minus(lit-value(x), lit-value(y)))
+  else if lit?(y, 0.0f): x
+  else if lit?(x) and op?(y, "add") and lit?(op-arg1(y)) : lit(lit-value(x) - lit-value(op-arg1(y))) - op-arg0(y) ;; sub(lx, add(y, ly)) = sub(lx - ly, y)
+  else if lit?(x) and op?(y, "sub") and lit?(op-arg1(y)) : lit(lit-value(x) + lit-value(op-arg1(y))) - op-arg0(y) ;; sub(lx, sub(y, ly)) = sub(lx + ly, y)
+  else if lit?(y) and op?(x, "add") and lit?(op-arg1(x)) : op-arg0(x) + lit(lit-value(op-arg1(x)) - lit-value(y)) ;; sub(add(x, lx), ly) = sub(x, lx - ly)
+  else if lit?(y) and op?(x, "sub") and lit?(op-arg1(x)) : op-arg0(x) - lit(lit-value(y) + lit-value(op-arg1(x))) ;; sub(sub(x, lx), ly) = sub(x, lx + ly)
+  else : binary("sub", x, y)
+public defn atan2 (x:FloField, y:FloField) -> FloField :
+  if lit?(x) and lit?(y): lit(atan2(lit-value(x), lit-value(y)))
+  else if lit?(x) and lit?(y): lit(atan2(lit-value(x), lit-value(y))) else: binary("atan2", x, y)
+public defn sqrt (x:FloField) -> FloField :
+  if lit?(x): lit(sqrt(lit-value(x))) else: unary("sqrt", x)
+public defn sqr (x:FloField) -> FloField :
+  if lit?(x): lit(lit-value(x) * lit-value(x)) else: unary("square", x)
+public defn abs (x:FloField) -> FloField :
+  if lit?(x): lit(abs(lit-value(x))) else: max(x, (- x))
+public defn sin (x:FloField) -> FloField : 
+  if lit?(x): lit(sin(lit-value(x))) else: unary("sin", x)
+public defn cos (x:FloField) -> FloField : 
+  if lit?(x): lit(cos(lit-value(x))) else: unary("cos", x)
+public defn tan (x:FloField) -> FloField : 
+  if lit?(x): lit(tan(lit-value(x))) else: unary("tan", x)
+public defn asin (x:FloField) -> FloField : 
+  if lit?(x): lit(asin(lit-value(x))) else: unary("asin", x)
+public defn acos (x:FloField) -> FloField : 
+  if lit?(x): lit(acos(lit-value(x))) else: unary("acos", x)
+public defn exp (x:FloField) -> FloField : 
+  if lit?(x): lit(exp(lit-value(x))) else: unary("exp", x)
+public defn negate (x:FloField) -> FloField : 
+  if lit?(x): lit(negate(lit-value(x))) else: unary("neg", x)
+
+public defn clamp (n:FloField, mn:FloField, mx:FloField) -> FloField :
+  min(mx, max(mn, n))
+
+public defn mix (a:FloField, b:FloField, i:FloField) -> FloField :
+  a * i + b * (lit(1.0) - i)
+
+public deftype Vec3Field <: Hashable & Equalable
+public defmulti x (v:Vec3Field) -> FloField
+public defmulti y (v:Vec3Field) -> FloField
+public defmulti z (v:Vec3Field) -> FloField
+public defmulti id (v:Vec3Field) -> Int
+
+var nxt-id:Int = -1
+
+defn new-id () :
+  nxt-id = nxt-id + 1
+  nxt-id
+
+public defn Vec3Field (x:FloField, y:FloField, z:FloField) :
+  val id = new-id()
+  new Vec3Field :
+    defmethod x (this) : x
+    defmethod y (this) : y
+    defmethod z (this) : z
+    defmethod id (this) : id
+    defmethod hash (this) : id
+
+defmethod equal? (a:Vec3Field, b:Vec3Field) -> True|False :
+  x(a) == x(b) and y(a) == y(b) and z(a) == z(b) 
+
+public defn lit (v:V3f) -> Vec3Field :
+  Vec3Field(lit(x(v)), lit(y(v)), lit(z(v)))
+
+public defn Vec3Field (n:FloField) -> Vec3Field :
+  Vec3Field(n, n, n)
+
+defmethod print (o:OutputStream, v:Vec3Field) :
+  print(o, "Vec3Field(%_, %_, %_)" % [x(v), y(v), z(v)])
+
+public deftype Vec2Field <: Vec3Field
+
+public defn Vec2Field (x:FloField, y:FloField) :
+  new Vec2Field :
+    defmethod x (this) : x
+    defmethod y (this) : y
+    defmethod z (this) : lit(0.0)
+
+defmethod print (o:OutputStream, v:Vec2Field) :
+  print(o, "Vec2Field(%_, %_)" % [x(v), y(v)])
+
+public defn Vec2Field (n:FloField) -> Vec2Field :
+  Vec2Field(n, n)
+
+public defn xy (v:Vec3Field) -> Vec2Field :
+  Vec2Field(x(v), y(v))
+
+public defn yz (v:Vec3Field) -> Vec2Field :
+  Vec2Field(y(v), z(v))
+
+public defn xz (v:Vec3Field) -> Vec2Field :
+  Vec2Field(x(v), z(v))
+
+public defn abs (a:Vec3Field) -> Vec3Field :
+  Vec3Field(abs(x(a)), abs(y(a)), abs(z(a)))
+
+public defn max (a:Vec3Field, b:FloField) -> Vec3Field :
+  Vec3Field(max(x(a), b), max(y(a), b), max(z(a), b))
+
+public defn max (a:Vec3Field, b:Vec3Field) -> Vec3Field :
+  Vec3Field(max(x(a), x(b)), max(y(a), y(b)), max(z(a), z(b)))
+
+public defn min (a:Vec3Field, b:FloField) -> Vec3Field :
+  Vec3Field(min(x(a), b), min(y(a), b), min(z(a), b))
+
+public defn min (a:Vec3Field, b:Vec3Field) -> Vec3Field :
+  Vec3Field(min(x(a), x(b)), min(y(a), y(b)), min(z(a), z(b)))
+
+public defn plus (a:Vec3Field, b:Vec3Field) -> Vec3Field :
+  Vec3Field(x(a) + x(b), y(a) + y(b), z(a) + z(b))
+
+public defn minus (a:Vec3Field, b:Vec3Field) -> Vec3Field :
+  Vec3Field(x(a) - x(b), y(a) - y(b), z(a) - z(b))
+
+public defn negate (a:Vec3Field) -> Vec3Field :
+  Vec3Field((- x(a)), (- y(a)), (- z(a)))
+
+public defn times (s:FloField, v:Vec3Field) -> Vec3Field :
+  Vec3Field(s * x(v), s * y(v), s * z(v))
+
+public defn times (a:Vec3Field, b:Vec3Field) -> Vec3Field :
+  Vec3Field(x(a) * x(b), y(a) * y(b), z(a) * z(b))
+
+public defn times (m:Mat44f, v:Vec3Field) -> Vec3Field :
+  val px = x(v) * lit(m[0,0]) + y(v) * lit(m[1,0]) + z(v) * lit(m[2,0]) + lit(m[3,0])
+  val py = x(v) * lit(m[0,1]) + y(v) * lit(m[1,1]) + z(v) * lit(m[2,1]) + lit(m[3,1])
+  val pz = x(v) * lit(m[0,2]) + y(v) * lit(m[1,2]) + z(v) * lit(m[2,2]) + lit(m[3,2])
+  val pw = x(v) * lit(m[0,3]) + y(v) * lit(m[1,3]) + z(v) * lit(m[2,3]) + lit(m[3,3])
+  Vec3Field(px / pw, py / pw, pz / pw)
+
+public defn dot (a:Vec3Field, b:Vec3Field) -> FloField :
+  x(a) * x(b) + y(a) * y(b) + z(a) * z(b)
+
+public defn len (v:Vec3Field) -> FloField :
+  sqrt(dot(v, v))
+
+public defn normalize (v:Vec3Field) -> Vec3Field :
+  v / len(v)
+
+public defn divide (a:Vec3Field, b:FloField) -> Vec3Field :
+  Vec3Field(x(a) / b, y(a) / b, z(a) / b)
+
+public defn divide (a:Vec3Field, b:Vec3Field) -> Vec3Field :
+  Vec3Field(x(a) / x(b), y(a) / y(b), z(a) / z(b))
+
+public defn modulo (a:Vec3Field, b:Vec3Field) -> Vec3Field :
+  Vec3Field(y(a) * z(b) - z(a) * y(b),
+            z(a) * x(b) - x(a) * z(b),
+            x(a) * y(b) - y(a) * x(b))
+
+public defstruct Mat22Field :
+  m00 : FloField
+  m01 : FloField
+  m10 : FloField
+  m11 : FloField
+
+public defn times (m:Mat22Field, v:Vec2Field) -> Vec2Field :
+  Vec2Field(m00(m) * x(v) + m01(m) * y(v), m10(m) * x(v) + m11(m) * y(v))
