@@ -163,7 +163,7 @@ public defn thicken (segments:Seqable<LineSegment3f>, f:(V3f, V3f, Float) -> Sha
 
 public defn thicken (segments:Seqable<LineSegment2f>, f:(V2f, V2f, Float) -> Shape, d:Float) -> Shape :
   val caps = for seg in segments seq : f(start(seg), end(seg), d)
-  reduce(fn (a:Shape, b:Shape): a | b, caps)
+  reduce(fn (a:Shape, b:Shape): a | b, empty(), caps)
 
 public defn extrude (zmin:Float, zmax:Float, shape:Shape) -> Shape :
   val b = bounds(shape)
