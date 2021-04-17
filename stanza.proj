@@ -7,4 +7,4 @@ package libfive/core requires :
   ccflags : "-lfive"
 package libfive/gfx defined-in "libfive-gfx.stanza"
 compile file "{WORKDIR}/build/libfive.o" from "libfive.cpp" :
-  "g++ -std=c++11 -I/usr/local/include/eigen3 -c {.}/libfive.cpp -o {WORKDIR}/build/libfive.o"
+  "g++ -std=c++17 -I/usr/local/include/eigen3 -c {.}/libfive.cpp -o {WORKDIR}/build/libfive.o"

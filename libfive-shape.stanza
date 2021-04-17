@@ -333,6 +333,12 @@ defn taper-xy-z (zmin:Float, zmax:Float, s0:Float, s1:Float, s:Shape) -> Shape :
     Vec3Field(x(p) * sc, y(p) * sc, z(p))
   with-xyz(id-mat44f(), xf, s)
 
+defn taper-y-z (zmin:Float, zmax:Float, s0:Float, s1:Float, s:Shape) -> Shape :
+  defn xf (p) :
+    val sc = lit(zmax - zmin) / ((lit(s1) * (z(p) - lit(zmin))) + (lit(s0) * (lit(zmax) - z(p))))
+    Vec3Field(x(p), y(p) * sc, z(p))
+  with-xyz(id-mat44f(), xf, s)
+
 public defn loft (zmin:Float, zmax:Float, a:Shape, b:Shape) -> Shape :
   val xy-bounds = bounds(a) | bounds(b)
   Shape(fn (p): max(max(z(p) - lit(zmax), lit(zmin) - z(p)),
@@ -343,6 +349,9 @@ public defn loft (h:Float, a:Shape, b:Shape) : loft(dim-min(h), dim-max(h), a, b
 
 public defn taper-xy-z (h:Float, s0:Float, s1:Float, s:Shape) -> Shape :
   taper-xy-z(dim-min(h), dim-max(h), s0, s1, s)
+
+public defn taper-y-z (h:Float, s0:Float, s1:Float, s:Shape) -> Shape :
+  taper-y-z(dim-min(h), dim-max(h), s0, s1, s)
 
 public defn revolve-y (s:Shape) -> Shape :
   val b = bounds(s)
