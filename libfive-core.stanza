@@ -114,12 +114,24 @@ extern libfive_pixels_delete: (ptr<libfive_pixels>) -> int
 extern printf: (ptr<?>, ? ...) -> int
 extern free: (ptr<?>) -> int
 
-public lostanza deftype Tree <: Geom :
+public lostanza deftype Tree <: Geom & Unique :
   var value: ptr<?>
+  
+public lostanza defn Tree (value: ptr<?>) -> ref<Tree> :
+  val ret = new Tree{value}
+  ; add-finalizer(new TreeFinalizer{value}, ret)
+  return ret
+
+lostanza deftype TreeFinalizer <: Finalizer :
+  pointer: ptr<?>
+
+lostanza defmethod run (f:ref<TreeFinalizer>) -> ref<False> :
+  if f.pointer != (0L as ptr<?>) :
+    call-c libfive_tree_delete(f.pointer)
+  return false
 
 defmethod print (o:OutputStream, t:Tree) :
   print-all(o, ["Tree()"])
-
 
 public lostanza defn tree-delete (t:ref<Tree>) -> ref<False> :
   call-c libfive_tree_delete(t.value)

@@ -75,21 +75,21 @@ defmethod count (f:FloFieldOp) -> Int :
   1 + reduce(i+, 0, seq(count, args(f)))
 
 public lostanza defn fab-x () -> ref<FloField> :
-  return FloFieldOp(new Tree{call-c libfive_tree_x()}, String("X"), List())
+  return FloFieldOp(Tree(call-c libfive_tree_x()), String("X"), List())
 public lostanza defn fab-y () -> ref<FloField> :
-  return FloFieldOp(new Tree{call-c libfive_tree_y()}, String("Y"), List())
+  return FloFieldOp(Tree(call-c libfive_tree_y()), String("Y"), List())
 public lostanza defn fab-z () -> ref<FloField> :
-  return FloFieldOp(new Tree{call-c libfive_tree_z()}, String("Z"), List())
+  return FloFieldOp(Tree(call-c libfive_tree_z()), String("Z"), List())
 public lostanza defn lit (f:ref<Float>) -> ref<FloField> :
-  return FloFieldLit(new Tree{call-c libfive_tree_const(f.value)}, f)
+  return FloFieldLit(Tree(call-c libfive_tree_const(f.value)), f)
 public lostanza defn lit (f:ref<Double>) -> ref<FloField> :
   return lit(to-float(f))
 public lostanza defn opcode (name:ref<String>) -> ref<Int> :
   return new Int{call-c libfive_opcode_enum(addr!(name.chars))}
 public lostanza defn unary (op:ref<String>, t:ref<FloField>) -> ref<FloField> :
-  return FloFieldOp(new Tree{call-c libfive_tree_unary(opcode(op).value, tree(t).value)}, op, List(t))
+  return FloFieldOp(Tree(call-c libfive_tree_unary(opcode(op).value, tree(t).value)), op, List(t))
 public lostanza defn binary (op:ref<String>, t1:ref<FloField>, t2:ref<FloField>) -> ref<FloField> :
-  return FloFieldOp(new Tree{call-c libfive_tree_binary(opcode(op).value, tree(t1).value, tree(t2).value)}, op, List(t1, t2))
+  return FloFieldOp(Tree(call-c libfive_tree_binary(opcode(op).value, tree(t1).value, tree(t2).value)), op, List(t1, t2))
 public defn min-lit () : lit(neg-inf-f)
 public defn max-lit () : lit(pos-inf-f)
 

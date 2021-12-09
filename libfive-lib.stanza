@@ -158,8 +158,20 @@ public defn sphere (d:Float) -> Shape :
 ;; public defn sphere (x:FloField, y:FloField, z:FloField, r:FloField) -> FloField :
 ;;   mov(x, y, z, {circle(r)})
 
+defn bounds-from-normal (n:V3f) -> Box3f :
+  let loop (i:Int = 0) :
+    if i < 3 :
+      if n == V3f-unit(i) :
+        Box3f(set-elt(xyz(neg-inf-f), i, 0.0f), xyz(pos-inf-f))
+      else if n == -1.0f * V3f-unit(i) :
+        Box3f(xyz(neg-inf-f), set-elt(xyz(pos-inf-f), i, 0.0f))
+      else :
+        loop(i + 1)
+    else :
+      pos-inf-box3f()
+
 public defn halfspace (n:V3f) -> Shape :
-  Shape(fn (p): dot(lit(n), p), pos-inf-box3f())
+  Shape(fn (p): dot(lit(n), p), bounds-from-normal(n))
 
 public defn trim (s:Shape, p:Plane) -> Shape :
   val res = intersect-using-mat-a(s, mov(center(p), halfspace(normal(p))))

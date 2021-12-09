@@ -21,6 +21,7 @@ defpackage libfive/shape :
   import libfive/core
   import libfive/field
 
+public defmulti id (s:Shape) -> Int
 public defmulti mesh (s:Shape) -> False|Mesh
 public defmulti set-mesh (s:Shape, m:Mesh) -> False
 public defmulti mat (s:Shape) -> Mat44f
