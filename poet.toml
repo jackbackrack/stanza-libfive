@@ -1,6 +1,6 @@
 name = "stanza-libfive"
-version = "0.1.0"
+version = "0.1.1"
 [dependencies]
-stanza-utils = "jackbackrack/stanza-utils|0.1.0"
-stanza-geom = "jackbackrack/stanza-geom|0.1.1"
-stanza-gfx = "jackbackrack/stanza-gfx|0.1.1"
+stanza-utils = "jackbackrack/stanza-utils|0.1.1"
+stanza-geom = "jackbackrack/stanza-geom|0.1.4"
+stanza-gfx = "jackbackrack/stanza-gfx|0.1.4"

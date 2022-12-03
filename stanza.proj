@@ -1,10 +1,19 @@
+foreign-package-params(conan) :
+  conan-build-dir: "{WORKDIR}/build"
+  conan-install-extra-args: ["--build" "missing"]
+  conan-remotes:
+    {name: "jitx-conan-remote" value: "http://ec2-44-226-24-141.us-west-2.compute.amazonaws.com:9300"}
+    {name: "conancenter" value: "https://center.conan.io"}
+    
 package libfive/core defined-in "libfive-core.stanza"
 package libfive/field defined-in "libfive-field.stanza"
 package libfive/shape defined-in "libfive-shape.stanza"
 package libfive/lib defined-in "libfive-lib.stanza"
 package libfive/core requires :
   ccfiles : "{WORKDIR}/build/libfive.o"
-  ccflags : "-lfive"
+  ccflags : "{CONAN-INCLUDES}"
+  foreign-packages(conan) :
+    "libfive/0.1"
 package libfive/gfx defined-in "libfive-gfx.stanza"
 compile file "{WORKDIR}/build/libfive.o" from "libfive.cpp" :
   "g++ -std=c++17 -I/usr/local/include/eigen3 -c {.}/libfive.cpp -o {WORKDIR}/build/libfive.o"
