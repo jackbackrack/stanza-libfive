@@ -1,5 +1,6 @@
 foreign-package-params(conan) :
   conan-build-dir: "{WORKDIR}/build"
+  conan-cache-dir: "{WORKDIR}/build"
   conan-install-extra-args: ["--build" "missing"]
   conan-remotes:
     {name: "jitx-conan-remote" value: "http://ec2-44-226-24-141.us-west-2.compute.amazonaws.com:9300"}
