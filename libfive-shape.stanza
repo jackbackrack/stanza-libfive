@@ -24,11 +24,11 @@ defpackage libfive/shape :
 public defmulti id (s:Shape) -> Int
 public defmulti mesh (s:Shape) -> False|Mesh
 public defmulti set-mesh (s:Shape, m:Mesh) -> False
-public defmulti mat (s:Shape) -> Mat44f
+public defmulti mat (s:Shape) -> Mat44d
 public defmulti cache (s:Shape) -> HashTable<Vec3Field,FloField>
 public defmulti fabber (s:Shape) -> ((Vec3Field) -> FloField)
 
-public defn Shape (fabber:(Vec3Field) -> FloField, mat:Mat44f, bounds:Box3f, state:AnyShapeState) :
+public defn Shape (fabber:(Vec3Field) -> FloField, mat:Mat44d, bounds:Box3d, state:AnyShapeState) :
   val cache = HashTable<Vec3Field,FloField>()
   var mesh:False|Mesh = false
   new Shape :
@@ -43,27 +43,27 @@ public defn Shape (fabber:(Vec3Field) -> FloField, mat:Mat44f, bounds:Box3f, sta
 public defn smash (s:Shape) -> Shape :
   xyz(inverse(mat(s)), s)
 
-public defn Shape (fabber:(Vec3Field) -> FloField, mat:Mat44f, bounds:Box3f, name:False|Symbol, color:V4f, tags:Tuple<Symbol>, poses:Tuple<KeyValue<Symbol,Mat44f>>) :
+public defn Shape (fabber:(Vec3Field) -> FloField, mat:Mat44d, bounds:Box3d, name:False|Symbol, color:V4d, tags:Tuple<Symbol>, poses:Tuple<KeyValue<Symbol,Mat44d>>) :
   Shape(fabber, mat, bounds, AnyShapeState(name, color, tags, poses))
 
-public defn Shape (fabber:(Vec3Field) -> FloField, bounds:Box3f) :
-  Shape(fabber, id-mat44f(), bounds, false, WHITE, [], [])
+public defn Shape (fabber:(Vec3Field) -> FloField, bounds:Box3d) :
+  Shape(fabber, id-mat44d(), bounds, false, WHITE, [], [])
 
-public defn map (f:Shape -> Shape, m:Mat44f, p:Poseable) -> Poseable :
+public defn map (f:Shape -> Shape, m:Mat44d, p:Poseable) -> Poseable :
   match(p) :
-    (a:Assembly) : Assembly(id-mat44f(), name(a), color(a), seq(map{f, mat(a) * m, _}, children(a)))
+    (a:Assembly) : Assembly(id-mat44d(), name(a), color(a), seq(map{f, mat(a) * m, _}, children(a)))
     (s:Shape) : f(xyz(m, s))
 
 public defn map (f:Shape -> Shape, p:Poseable) -> Poseable :
-  map(f, id-mat44f(), p)
+  map(f, id-mat44d(), p)
 
 defmethod clone (shape:Shape, state:AnyShapeState) -> Shape :
   Shape(fabber(shape), mat(shape), bounds(shape), state)
 
-public defn Shape (s:Shape, mat:Mat44f, bounds:Box3f, name:False|Symbol, color:V4f, tags:Tuple<Symbol>, poses:Tuple<KeyValue<Symbol,Mat44f>>) :
+public defn Shape (s:Shape, mat:Mat44d, bounds:Box3d, name:False|Symbol, color:V4d, tags:Tuple<Symbol>, poses:Tuple<KeyValue<Symbol,Mat44d>>) :
   Shape(fabber(s), mat, bounds, name, color, tags, poses)
 
-public defn Shape (s:Shape, bounds:Box3f) :
+public defn Shape (s:Shape, bounds:Box3d) :
   Shape(s, mat(s), bounds, name(s), WHITE, tags(s), poses(s))
 
 defn fab (s:Shape, p:Vec3Field) -> FloField :
@@ -89,11 +89,11 @@ public defn to-mesh (s:Shape) -> Mesh :
 public defn empty? (s:Shape) -> True|False :
   empty?(bounds(s)) or empty?(vertices(to-mesh(s)))
 
-public defn computed-bounds (s:Shape) -> Box3f :
+public defn computed-bounds (s:Shape) -> Box3d :
   bounds(to-mesh(s))
 
 public defn empty2? (s:Shape) -> True|False :
-  empty?(xy(bounds(s))) or perimeter(slice(0.0f, s)) == 0.0f
+  empty?(xy(bounds(s))) or perimeter(slice(0.0, s)) == 0.0
 
 public defn intersects? (a:Shape, b:Shape) -> True|False :
   false when empty?(bounds(a) & bounds(b)) else not empty?(a & b)
@@ -103,46 +103,46 @@ public defn intersects2? (a:Shape, b:Shape) -> True|False :
 
 public deftype Glue <: ShapeGlue&Shape
 
-public defn Glue (amount:Float) :
+public defn Glue (amount:Double) :
   new Glue :
-    defmethod fabber (this): fn (p:Vec3Field) : lit(pos-inf-f)
-    defmethod bounds (this): Box3f(V3f(0.0f, 0.0f, 0.0f), V3f(0.0f, 0.0f, 0.0f))
+    defmethod fabber (this): fn (p:Vec3Field) : lit(pos-inf-d)
+    defmethod bounds (this): Box3d(V3d(0.0, 0.0, 0.0), V3d(0.0, 0.0, 0.0))
     defmethod amount (this): amount
 
-defmethod glue-of (s:Shape, a:Float) -> Shape : Glue(a)
-defmethod glue-of (s:Assembly, a:Float) -> Assembly : AssemblyGlue(Glue(a))
+defmethod glue-of (s:Shape, a:Double) -> Shape : Glue(a)
+defmethod glue-of (s:Assembly, a:Double) -> Assembly : AssemblyGlue(Glue(a))
 
-public defn empty () : Shape(lit{pos-inf-f}, neg-inf-box3f())
-public defn full () : Shape(lit{neg-inf-f}, pos-inf-box3f())
+public defn empty () : Shape(lit{pos-inf-d}, neg-inf-box3d())
+public defn full () : Shape(lit{neg-inf-d}, pos-inf-box3d())
 
-defmethod spacer (g:Shape, gdims:V3f) : Shape(lit{pos-inf-f}, Box3f(dim-min(gdims), dim-max(gdims)))
-defmethod spacer (g:Assembly, dims:V3f) : rgb(BLACK, Assembly([ spacer(empty(), dims) ]))
+defmethod spacer (g:Shape, gdims:V3d) : Shape(lit{pos-inf-d}, Box3d(dim-min(gdims), dim-max(gdims)))
+defmethod spacer (g:Assembly, dims:V3d) : rgb(BLACK, Assembly([ spacer(empty(), dims) ]))
 
-public defn spacer-x (gdim:Float) : spacer-x(gdim, empty())
-public defn spacer-y (gdim:Float) : spacer-y(gdim, empty())
-public defn spacer-z (gdim:Float) : spacer-z(gdim, empty())
+public defn spacer-x (gdim:Double) : spacer-x(gdim, empty())
+public defn spacer-y (gdim:Double) : spacer-y(gdim, empty())
+public defn spacer-z (gdim:Double) : spacer-z(gdim, empty())
 
 
-public var *render-offset* = 16.0f
+public var *render-offset* = 16.0
 
-public defn slice (z:Float, s:Shape) -> Polygon :
+public defn slice (z:Double, s:Shape) -> Polygon :
   val bt = jit(s) as BoundedTree
   val eps = *render-offset* ;; *resolution*
-  val bds = Box3f(xyz(xy(lo(bounds(s)))) + V3f((- eps), (- eps), z), xyz(xy(hi(bounds(s)))) + V3f(eps, eps, z))
+  val bds = Box3d(xyz(xy(lo(bounds(s)))) + V3d((- eps), (- eps), z), xyz(xy(hi(bounds(s)))) + V3d(eps, eps, z))
   val start = current-time-ms()
   val poly = rgb(color(s), tree-render-slice(tree(bt), bds & max-bounds(), *resolution*))
-  ;; println-all(["RENDER-SLICE = " to-float(current-time-ms() - start) * 0.001f])
+  ;; println-all(["RENDER-SLICE = " to-double(current-time-ms() - start) * 0.001f])
   poly
 
-public defn pixels (z:Float, s:Shape) -> Pixels :
+public defn pixels (z:Double, s:Shape) -> Pixels :
   ;; println-all(["RENDER-PIXELS-START " bounds(s)])
   val bt = jit(s) as BoundedTree
   ;; val eps = *render-offset* ;; *resolution*
-  val eps = 1.0f / *resolution*
-  val bds = Box3f(xyz(xy(lo(bounds(s)))) + V3f((- eps), (- eps), z), xyz(xy(hi(bounds(s)))) + V3f(eps, eps, z))
+  val eps = 1.0 / *resolution*
+  val bds = Box3d(xyz(xy(lo(bounds(s)))) + V3d((- eps), (- eps), z), xyz(xy(hi(bounds(s)))) + V3d(eps, eps, z))
   val start = current-time-ms()
   val pixels = tree-render-pixels(tree(bt), bds & max-bounds(), *resolution*)
-  ;; println-all(["RENDER-PIXELS = " to-float(current-time-ms() - start) * 0.001f])
+  ;; println-all(["RENDER-PIXELS = " to-double(current-time-ms() - start) * 0.001f])
   pixels
 
 public defn rem (a:Shape, args:Seqable<Shape>) -> Shape :
@@ -152,35 +152,35 @@ public defn rem (shapes:Seqable<Shape>) -> Shape :
   val s = to-seq(shapes)
   rem(next(s), s)
 
-public defn thicken (g:PolyLine2f|Contour|Polygon, f:(V2f, V2f, Float) -> Shape, d:Float) -> Shape :
+public defn thicken (g:PolyLine2|Contour|Polygon, f:(V2d, V2d, Double) -> Shape, d:Double) -> Shape :
   thicken(segments(g), f, d)
 
-public defn thicken (g:PolyLine3f, f:(V3f, V3f, Float) -> Shape, d:Float) -> Shape :
+public defn thicken (g:PolyLine3, f:(V3d, V3d, Double) -> Shape, d:Double) -> Shape :
   thicken(segments(g), f, d)
 
-public defn thicken (segments:Seqable<LineSegment3f>, f:(V3f, V3f, Float) -> Shape, d:Float) -> Shape :
+public defn thicken (segments:Seqable<LineSegment3>, f:(V3d, V3d, Double) -> Shape, d:Double) -> Shape :
   val caps = for seg in segments seq : f(start(seg), end(seg), d)
   reduce(fn (a:Shape, b:Shape): a | b, caps)
 
-public defn thicken (segments:Seqable<LineSegment2f>, f:(V2f, V2f, Float) -> Shape, d:Float) -> Shape :
+public defn thicken (segments:Seqable<LineSegment2>, f:(V2d, V2d, Double) -> Shape, d:Double) -> Shape :
   val caps = for seg in segments seq : f(start(seg), end(seg), d)
   reduce(fn (a:Shape, b:Shape): a | b, empty(), caps)
 
-public defn extrude (zmin:Float, zmax:Float, shape:Shape) -> Shape :
+public defn extrude (zmin:Double, zmax:Double, shape:Shape) -> Shape :
   val b = bounds(shape)
   Shape(fn (p): max(fab(shape, p), max(lit(zmin) - z(p), z(p) - lit(zmax))),
-        Box3f(V3f(x(lo(b)), y(lo(b)), zmin), V3f(x(hi(b)), y(hi(b)), zmax)))
+        Box3d(V3d(x(lo(b)), y(lo(b)), zmin), V3d(x(hi(b)), y(hi(b)), zmax)))
 
-public defn extrude (h:Float, shape:Shape) -> Shape :
+public defn extrude (h:Double, shape:Shape) -> Shape :
   extrude(dim-min(h), dim-max(h), shape)
 
-public defn extrude (h:Float) : extrude{h, _}
+public defn extrude (h:Double) : extrude{h, _}
 
 public defmethod bit-or (a:Shape, b:Shape) -> Shape :
   val new-bounds = bounds(a) | bounds(b)
   val delta = center(new-bounds) - center(bounds(a))
   Shape(fn (p): min(fab(a, p), fab(b, p)),
-        mat(a) * mov-mat44f(delta), bounds(a) | bounds(b), name(a, b), color(a, b), tags(a, b), poses(a, b))
+        mat(a) * mov-mat44d(delta), bounds(a) | bounds(b), name(a, b), color(a, b), tags(a, b), poses(a, b))
 
 public defn intersection (args:Seqable<Shape>) -> Shape :
   reduce(bit-and, args)
@@ -189,7 +189,7 @@ public defn bit-and (a:Shape, b:Shape) -> Shape :
   val new-bounds = bounds(a) & bounds(b)
   val delta = center(new-bounds) - center(bounds(a))
   Shape(fn (p): max(fab(a, p), fab(b, p)),
-        mat(a) * mov-mat44f(delta), new-bounds, name(a, b), color(a, b), tags(a, b), poses(a, b))
+        mat(a) * mov-mat44d(delta), new-bounds, name(a, b), color(a, b), tags(a, b), poses(a, b))
 
 public defn intersect-using-mat-a (a:Shape, b:Shape) -> Shape :
   val new-bounds = bounds(a)
@@ -202,87 +202,87 @@ public defn union-using-mat-a (a:Shape, b:Shape) -> Shape :
         mat(a), new-bounds, name(a), color(a), tags(a), poses(a))
 
 public defn invert (s:Shape) -> Shape :
-  Shape(fn (p): (- fab(s, p)), pos-inf-box3f())
+  Shape(fn (p): (- fab(s, p)), pos-inf-box3d())
 
 public defn rem (a:Shape, b:Shape) -> Shape :
   Shape(a & invert(b), mat(a), bounds(a), name(a, b), color(a, b), tags(a, b), poses(a, b))
 
-public defn offset (s:Shape, o:Float) -> Shape :
+public defn offset (s:Shape, o:Double) -> Shape :
   Shape(fn (p): fab(s, p) - lit(o), mat(s), fatten(bounds(s), xyz(o)), name(s), color(s), tags(s), poses(s))
   
-public defn clearance (a:Shape, b:Shape, o:Float) -> Shape :
+public defn clearance (a:Shape, b:Shape, o:Double) -> Shape :
   Shape(a & invert(offset(b, o)), mat(a), bounds(a), name(a, b), color(a, b), tags(a, b), poses(a))
   
-public defn shell (s:Shape, o:Float) -> Shape :
+public defn shell (s:Shape, o:Double) -> Shape :
   clearance(s, s, (- o))
   
-public defn blend (a:Shape, b:Shape, m:Float) -> Shape :
+public defn blend (a:Shape, b:Shape, m:Double) -> Shape :
   val joint = a | b
   val fillet = Shape(fn (p): sqrt(abs(fab(a, p))) + sqrt(abs(fab(b, p))) - lit(m), bounds(a) | bounds(b))
   joint | fillet
   
-public defn morph (a:Shape, b:Shape, m:Float) -> Shape :
+public defn morph (a:Shape, b:Shape, m:Double) -> Shape :
   Shape(fn (p): fab(a, p) * (lit(1.0) - lit(m)) + fab(b, p) * lit(m), bounds(a) | bounds(b))
 
-public defn with-xyz (m:Mat44f, f:(Vec3Field) -> Vec3Field, s:Shape) -> Shape :
+public defn with-xyz (m:Mat44d, f:(Vec3Field) -> Vec3Field, s:Shape) -> Shape :
   val new-poses = to-tuple $ seq(fn (p) : key(p) => value(p) * m, poses(s))
   Shape(fn (p): fab(s, f(p)), mat(s) * m, m * bounds(s),
         name(s), color(s), tags(s), new-poses)
 
-public defmethod xyz (mat:Mat44f, s:Shape) -> Shape :
+public defmethod xyz (mat:Mat44d, s:Shape) -> Shape :
   with-xyz(mat, fn (p) : inverse(mat) * p, s)
 
-public defn xy (s:Shape) -> Shape : xy(0.0f, s)
+public defn xy (s:Shape) -> Shape : xy(0.0, s)
 
 ;; TODO : UPDATE BOUNDS
-public defn xy (z:Float, s:Shape) -> Shape :
-  with-xyz(id-mat44f(), fn (p): Vec3Field(x(p), y(p), lit(z)), s)
+public defn xy (z:Double, s:Shape) -> Shape :
+  with-xyz(id-mat44d(), fn (p): Vec3Field(x(p), y(p), lit(z)), s)
 
-public defn edge (v0:V3f, v1:V3f) -> Shape :
+public defn edge (v0:V3d, v1:V3d) -> Shape :
   Shape(fn (p): lit(y(v1) - y(v0)) * (x(p) - lit(x(v0))) - lit(x(v1) - x(v0)) * (y(p) - lit(y(v0))),
-        Box3f(v0) | Box3f(v1))
+        Box3d(v0) | Box3d(v1))
 
-public defn area (pts:Tuple<V3f>) -> Float :
-  var tot:Float = 0.0f
+public defn area (pts:Tuple<V3d>) -> Double :
+  var tot:Double = 0.0
   for i in 0 to length(pts) do :
     val p1 = pts[i]
     val p2 = pts[(i + 1) % length(pts)]
     tot = tot + (x(p2) - x(p1)) * (y(p2) + y(p1))
   tot
 
-public defn convex (ipts:Tuple<V3f>) -> Shape :
-  val pts   = ipts when area(ipts) < 0.0f else (to-tuple $ reverse(to-list $ ipts))
+public defn convex (ipts:Tuple<V3d>) -> Shape :
+  val pts   = ipts when area(ipts) < 0.0 else (to-tuple $ reverse(to-list $ ipts))
   val edges = for i in 0 to length(pts) seq :
                 edge(pts[i], pts[(i + 1) % length(pts)])
   val shape = reduce(fn (a:Shape, b:Shape): a & b, edges)
-  Shape(fabber(shape), reduce(bit-or, seq(Box3f, ipts)))
+  Shape(fabber(shape), reduce(bit-or, seq(Box3d, ipts)))
 
-public defn trim (v0:V3f, v1:V3f, s:Shape) -> Shape :
+public defn trim (v0:V3d, v1:V3d, s:Shape) -> Shape :
   val res = s & edge(v0, v1)
   Shape(fabber(res), bounds(s))
 
 public defn abs-x (s:Shape) -> Shape :
-  val res = s & edge(V3f(0.0f, neg-inf-f), V3f(0.0f, pos-inf-f))
-  val new-bounds = Box3f(set-elt(lo(bounds(s)), 0, max(lo(bounds(s))[0], 0.0f)),
-                         set-elt(hi(bounds(s)), 0, max(hi(bounds(s))[0], 0.0f)))
+  val res = s & edge(V3d(0.0, neg-inf-d), V3d(0.0, pos-inf-d))
+  val new-bounds = Box3d(set-elt(lo(bounds(s)), 0, max(lo(bounds(s))[0], 0.0)),
+                         set-elt(hi(bounds(s)), 0, max(hi(bounds(s))[0], 0.0)))
   Shape(fabber(res), new-bounds)
 
 public defn abs-y (s:Shape) -> Shape :
-  val res = s & edge(V3f(neg-inf-f, 0.0f), V3f(pos-inf-f, 0.0f))
-  val new-bounds = Box3f(set-elt(lo(bounds(s)), 1, max(lo(bounds(s))[1], 0.0f)),
-                         set-elt(hi(bounds(s)), 1, max(hi(bounds(s))[1], 0.0f)))
+  val res = s & edge(V3d(neg-inf-d, 0.0), V3d(pos-inf-d, 0.0))
+  val new-bounds = Box3d(set-elt(lo(bounds(s)), 1, max(lo(bounds(s))[1], 0.0)),
+                         set-elt(hi(bounds(s)), 1, max(hi(bounds(s))[1], 0.0)))
   Shape(fabber(res), new-bounds)
 
-defn shear-x-y (ymin:Float, ymax:Float, dx0:Float, dx1:Float, s:Shape) -> Shape :
+defn shear-x-y (ymin:Double, ymax:Double, dx0:Double, dx1:Double, s:Shape) -> Shape :
   defn xf (p) :
     val f = (y(p) - lit(ymin)) / (lit(ymax) - y(p))
     Vec3Field(x(p) - lit(dx0) * (lit(1.0) - f) - lit(dx1) * f, y(p), z(p))  
-  with-xyz(shear-x-y-mat44f(ymin, ymax, dx0, dx1), xf, s)
+  with-xyz(shear-x-y-mat44d(ymin, ymax, dx0, dx1), xf, s)
 
-public defn shear-x-y (h:Float, dx0:Float, dx1:Float, s:Shape) -> Shape :
+public defn shear-x-y (h:Double, dx0:Double, dx1:Double, s:Shape) -> Shape :
   shear-x-y(dim-min(h), dim-max(h), dx0, dx1, s)
 
-public defn twist-z (h:Float, a:Float, shape:Shape) -> Shape :
+public defn twist-z (h:Double, a:Double, shape:Shape) -> Shape :
   defn xf (p) :
     val f = degrees-to-radians(a) / h
     val b = lit(f) * z(p)
@@ -293,7 +293,7 @@ public defn twist-z (h:Float, a:Float, shape:Shape) -> Shape :
     fab(shape, Vec3Field(x(v), y(v), z(p)))
   Shape(xf, bounds(shape))
 
-public defn bend-z (h:Float, a:Float, shape:Shape) -> Shape :
+public defn bend-z (h:Double, a:Double, shape:Shape) -> Shape :
   defn xf (p) :
     val f = degrees-to-radians(a) / h
     val b = lit(f) * y(p)
@@ -305,77 +305,77 @@ public defn bend-z (h:Float, a:Float, shape:Shape) -> Shape :
   Shape(xf, bounds(shape))
 
 ;; TODO: CAN'T GET THIS TO WORK WELL
-public defn bumps (period:Float, shape:Shape) -> Shape :
+public defn bumps (period:Double, shape:Shape) -> Shape :
   Shape(fn (p):
-          val fac = lit(PI-F / period)
+          val fac = lit(PI / period)
           val b = sin(fac * x(p)) + sin(fac * y(p)) + sin(fac * z(p))
           fab(shape, p) + b,
         bounds(shape))
 
 ;; TODO: CAN'T GET THIS TO WORK WELL
-public defn smooth-union (k:Float, a:Shape, b:Shape) -> Shape :
+public defn smooth-union (k:Double, a:Shape, b:Shape) -> Shape :
   Shape(fn (p):
           val [ar, br] = [fab(a, p), fab(b, p)]
           val h = clamp(lit(0.5) + lit(0.5) * (br - ar) / lit(k), lit(0.0), lit(1.0))
           mix(ar, br, h) - lit(k) * h * (lit(1.0) - h)
-        id-mat44f(), bounds(a) | bounds(b), name(a, b), color(a, b), tags(a, b), poses(a, b))
+        id-mat44d(), bounds(a) | bounds(b), name(a, b), color(a, b), tags(a, b), poses(a, b))
 
 ;; TODO : UPDATE BOUNDS
-defn taper-x-y (ymin:Float, ymax:Float, s0:Float, s1:Float, s:Shape) -> Shape :
+defn taper-x-y (ymin:Double, ymax:Double, s0:Double, s1:Double, s:Shape) -> Shape :
   defn xf (p) :
     val sc = lit(ymax - ymin) / ((lit(s1) * (y(p) - lit(ymin))) + (lit(s0) * (lit(ymax) - y(p))))
     Vec3Field(x(p) * sc, y(p), z(p))
-  with-xyz(id-mat44f(), xf, s)
+  with-xyz(id-mat44d(), xf, s)
 
 ;; TODO : UPDATE BOUNDS
-defn taper-xy-z (zmin:Float, zmax:Float, s0:Float, s1:Float, s:Shape) -> Shape :
+defn taper-xy-z (zmin:Double, zmax:Double, s0:Double, s1:Double, s:Shape) -> Shape :
   defn xf (p) :
     val sc = lit(zmax - zmin) / ((lit(s1) * (z(p) - lit(zmin))) + (lit(s0) * (lit(zmax) - z(p))))
     Vec3Field(x(p) * sc, y(p) * sc, z(p))
-  with-xyz(id-mat44f(), xf, s)
+  with-xyz(id-mat44d(), xf, s)
 
-defn taper-y-z (zmin:Float, zmax:Float, s0:Float, s1:Float, s:Shape) -> Shape :
+defn taper-y-z (zmin:Double, zmax:Double, s0:Double, s1:Double, s:Shape) -> Shape :
   defn xf (p) :
     val sc = lit(zmax - zmin) / ((lit(s1) * (z(p) - lit(zmin))) + (lit(s0) * (lit(zmax) - z(p))))
     Vec3Field(x(p), y(p) * sc, z(p))
-  with-xyz(id-mat44f(), xf, s)
+  with-xyz(id-mat44d(), xf, s)
 
-public defn loft (zmin:Float, zmax:Float, a:Shape, b:Shape) -> Shape :
+public defn loft (zmin:Double, zmax:Double, a:Shape, b:Shape) -> Shape :
   val xy-bounds = bounds(a) | bounds(b)
   Shape(fn (p): max(max(z(p) - lit(zmax), lit(zmin) - z(p)),
                    (((z(p) - lit(zmin)) * fab(b, p)) + ((lit(zmax) - z(p)) * fab(a, p))) / (lit(zmax) - lit(zmin)))
-        Box3f(set-elt(lo(xy-bounds), 2, zmin), set-elt(hi(xy-bounds), 2, zmax)))
+        Box3d(set-elt(lo(xy-bounds), 2, zmin), set-elt(hi(xy-bounds), 2, zmax)))
 
-public defn loft (h:Float, a:Shape, b:Shape) : loft(dim-min(h), dim-max(h), a, b)
+public defn loft (h:Double, a:Shape, b:Shape) : loft(dim-min(h), dim-max(h), a, b)
 
-public defn taper-xy-z (h:Float, s0:Float, s1:Float, s:Shape) -> Shape :
+public defn taper-xy-z (h:Double, s0:Double, s1:Double, s:Shape) -> Shape :
   taper-xy-z(dim-min(h), dim-max(h), s0, s1, s)
 
-public defn taper-y-z (h:Float, s0:Float, s1:Float, s:Shape) -> Shape :
+public defn taper-y-z (h:Double, s0:Double, s1:Double, s:Shape) -> Shape :
   taper-y-z(dim-min(h), dim-max(h), s0, s1, s)
 
 public defn revolve-y (s:Shape) -> Shape :
   val b = bounds(s)
   val xmx = max(abs(x(lo(b))), abs(x(hi(b))))
-  Shape(with-xyz(id-mat44f(), fn (p): Vec3Field(sqrt(sqr(x(p)) + sqr(z(p))), y(p), z(p)), s),
-        Box3f(V3f((- xmx), y(lo(b)), (- xmx)), V3f(xmx, y(hi(b)), xmx)))
+  Shape(with-xyz(id-mat44d(), fn (p): Vec3Field(sqrt(sqr(x(p)) + sqr(z(p))), y(p), z(p)), s),
+        Box3d(V3d((- xmx), y(lo(b)), (- xmx)), V3d(xmx, y(hi(b)), xmx)))
 
 public defn unrevolve-y (s:Shape) -> Shape :
-  with-xyz(mag-mat44f(V3f(PI-F, 1.0f, 1.0f)), fn (p): Vec3Field(z(p) * cos(x(p)), y(p), z(p) * sin(x(p))), s)
-  ;; with-xyz(mag-mat44f(V3f(2.0f * PI-F, 1.0f, 1.0f)), fn (p): Vec3Field(atan2(x(p), z(p)), y(p), sqrt(sqr(x(p)) + sqr(z(p)))), s)
+  with-xyz(mag-mat44d(V3d(PI, 1.0, 1.0)), fn (p): Vec3Field(z(p) * cos(x(p)), y(p), z(p) * sin(x(p))), s)
+  ;; with-xyz(mag-mat44d(V3d(2.0 * PI, 1.0, 1.0)), fn (p): Vec3Field(atan2(x(p), z(p)), y(p), sqrt(sqr(x(p)) + sqr(z(p)))), s)
 
 public defn revolve-x (s:Shape) -> Shape :
   val b = bounds(s)
   val ymx = max(abs(y(lo(b))), abs(y(hi(b))))
-  Shape(with-xyz(id-mat44f(), fn (p): Vec3Field(x(p), sqrt(sqr(y(p)) + sqr(z(p))), z(p)), s),
-        Box3f(V3f(x(lo(b)), (- ymx), (- ymx)), V3f(x(hi(b)), ymx, ymx)))
+  Shape(with-xyz(id-mat44d(), fn (p): Vec3Field(x(p), sqrt(sqr(y(p)) + sqr(z(p))), z(p)), s),
+        Box3d(V3d(x(lo(b)), (- ymx), (- ymx)), V3d(x(hi(b)), ymx, ymx)))
 
 public defn unrevolve-x (s:Shape) -> Shape :
-  with-xyz(mag-mat44f(V3f(1.0f, 1.0f, 1.0f)), fn (p): Vec3Field(x(p), z(p) * cos(y(p)), z(p) * sin(y(p))), s)
-  ;; mag-y(PI-F, with-xyz(id-mat44f(), fn (p): Vec3Field(x(p), z(p) * cos(y(p)), z(p) * sin(y(p))), s))
-  ;; with-xyz(mag-mat44f(V3f(2.0f * PI-F, 1.0f, 1.0f)), fn (p): Vec3Field(x(p), atan2(y(p), z(p)), sqrt(sqr(y(p)) + sqr(z(p)))), s)
+  with-xyz(mag-mat44d(V3d(1.0, 1.0, 1.0)), fn (p): Vec3Field(x(p), z(p) * cos(y(p)), z(p) * sin(y(p))), s)
+  ;; mag-y(PI, with-xyz(id-mat44d(), fn (p): Vec3Field(x(p), z(p) * cos(y(p)), z(p) * sin(y(p))), s))
+  ;; with-xyz(mag-mat44d(V3d(2.0 * PI, 1.0, 1.0)), fn (p): Vec3Field(x(p), atan2(y(p), z(p)), sqrt(sqr(y(p)) + sqr(z(p)))), s)
 
-;; public defn pixels (z:Float, s:Shape) -> Pixels :
+;; public defn pixels (z:Double, s:Shape) -> Pixels :
 ;;   val poly = slice(z, s)
 ;;   val dim = *resolution*
 ;;   val gdims = xyz(xy(to-v3i(round(dims(bounds(s)) / dim)))) + V3i(0, 0, 1)
@@ -388,15 +388,15 @@ public defn dump (filename:String, s:Shape) -> False :
   val bt = jit(s) as BoundedTree
   tree-save(tree(bt), filename)
 
-public defn eval-f (p:V3f, s:Shape) -> Float :
+public defn eval-d (p:V3d, s:Shape) -> Double :
   val bt = jit(s) as BoundedTree
-  tree-eval-f(tree(bt), p)
+  tree-eval-d(tree(bt), p)
 
 public defn math-string (s:Shape) -> String :
   val bt = jit(s) as BoundedTree
   tree-print(tree(bt))
 
-public defn save (z:Float, filename:String, s:Shape) -> False :
+public defn save (z:Double, filename:String, s:Shape) -> False :
   val bt = jit(s) as BoundedTree
   val eps = *resolution*
   tree-save-slice(tree(bt), filename, fatten(bounds(s), xyz(eps)) & max-bounds(), *resolution*)
@@ -422,8 +422,8 @@ public defn set-mesh (t:BoundedTree, m:Mesh) : set-mesh(shape(t), m)
 
 public defstruct TreeAssembly <: AnyTree :
   name  : False|Symbol
-  mat   : Mat44f
-  color : V4f
+  mat   : Mat44d
+  color : V4d
   trees : Tuple<AnyTree>
 
 ;; public defn union (args:Seqable<Shape>) -> Shape :
@@ -447,17 +447,17 @@ public defn to-mesh (bt:BoundedTree) -> Mesh :
     ;; val bds = fatten(bounds(bt), xyz(*render-offset*))
     ;; val res = tree-render-mesh(tree(bt), bds, *resolution*)
     ;; val mesh-time = current-time-ms()
-    ;; println-all(["MESH-" num " " dims(bds) " RENDER " to-float(mesh-time - start-time) * 0.001f " SECS"])
+    ;; println-all(["MESH-" num " " dims(bds) " RENDER " to-double(mesh-time - start-time) * 0.001f " SECS"])
     ;; rgb(color(shape(bt)), res)
     set-mesh(bt, res)
     res
   else :
     mesh(bt) as Mesh
 
-public var *max-bounds*:False|Box3f = false
+public var *max-bounds*:False|Box3d = false
 public defn max-bounds () :
-  default<Box3f>(*max-bounds*, dims-to-box $ xyz(*resolution* * 1000.0f))
-public defn set-max-bounds (b:Box3f) : *max-bounds* = b
+  default<Box3d>(*max-bounds*, dims-to-box $ xyz(*resolution* * 1000.0))
+public defn set-max-bounds (b:Box3d) : *max-bounds* = b
 
 defmethod jit-poseable (s:Shape) -> BoundedTree :
   val e = fab(s, Vec3Field(fab-x(), fab-y(), fab-z()))

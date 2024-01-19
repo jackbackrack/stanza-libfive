@@ -10,7 +10,7 @@ defpackage libfive/field :
 extern libfive_tree_x: () -> ptr<?>
 extern libfive_tree_y: () -> ptr<?>
 extern libfive_tree_z: () -> ptr<?>
-extern libfive_tree_const: (float) -> ptr<?>
+extern libfive_tree_const: (double) -> ptr<?>
 extern libfive_tree_unary: (int, ptr<?>) -> ptr<?>
 extern libfive_tree_binary: (int, ptr<?>, ptr<?>) -> ptr<?>
 extern libfive_opcode_enum: (ptr<?>) -> int
@@ -21,14 +21,14 @@ public defmulti count (f:FloField) -> Int
 
 public defstruct FloFieldLit <: FloField :
   tree: Tree with: (as-method => true)
-  value: Float
+  value: Double
 
 defn lit? (f:FloField) -> True|False :
   match(f):
     (l:FloFieldLit) : true
     (o:FloFieldOp) : false
 
-defn lit? (f:FloField, v:Float) -> True|False :
+defn lit? (f:FloField, v:Double) -> True|False :
   match(f):
     (l:FloFieldLit) : value(l) == v
     (o:FloFieldOp) : false
@@ -46,10 +46,10 @@ defn op-args (f:FloField) -> List<FloField> :
 defn op-arg0 (f:FloField) -> FloField : op-args(f)[0]
 defn op-arg1 (f:FloField) -> FloField : op-args(f)[1]
 
-defn lit-value (f:FloField) -> Float :
+defn lit-value (f:FloField) -> Double :
   match(f):
     (l:FloFieldLit) : value(l)
-    (o:FloFieldOp) : 0.0f
+    (o:FloFieldOp) : 0.0
 
 defmethod print (s:OutputStream, f:FloFieldLit) :
   print(s, "LIT(%_)" % [value(f)])
@@ -80,18 +80,16 @@ public lostanza defn fab-y () -> ref<FloField> :
   return FloFieldOp(Tree(call-c libfive_tree_y()), String("Y"), List())
 public lostanza defn fab-z () -> ref<FloField> :
   return FloFieldOp(Tree(call-c libfive_tree_z()), String("Z"), List())
-public lostanza defn lit (f:ref<Float>) -> ref<FloField> :
-  return FloFieldLit(Tree(call-c libfive_tree_const(f.value)), f)
 public lostanza defn lit (f:ref<Double>) -> ref<FloField> :
-  return lit(to-float(f))
+  return FloFieldLit(Tree(call-c libfive_tree_const(f.value)), f)
 public lostanza defn opcode (name:ref<String>) -> ref<Int> :
   return new Int{call-c libfive_opcode_enum(addr!(name.chars))}
 public lostanza defn unary (op:ref<String>, t:ref<FloField>) -> ref<FloField> :
   return FloFieldOp(Tree(call-c libfive_tree_unary(opcode(op).value, tree(t).value)), op, List(t))
 public lostanza defn binary (op:ref<String>, t1:ref<FloField>, t2:ref<FloField>) -> ref<FloField> :
   return FloFieldOp(Tree(call-c libfive_tree_binary(opcode(op).value, tree(t1).value, tree(t2).value)), op, List(t1, t2))
-public defn min-lit () : lit(neg-inf-f)
-public defn max-lit () : lit(pos-inf-f)
+public defn min-lit () : lit(neg-inf-d)
+public defn max-lit () : lit(pos-inf-d)
 
 public defn nan-fill (x:FloField, y:FloField) -> FloField : binary("nan-fill", x, y)
 public defn modulo (x:FloField, y:FloField) -> FloField :
@@ -99,27 +97,27 @@ public defn modulo (x:FloField, y:FloField) -> FloField :
   else : binary("mod", x, y)
 public defn times (x:FloField, y:FloField) -> FloField : 
   if lit?(x) and lit?(y): lit(times(lit-value(x), lit-value(y)))
-  else if lit?(x, 1.0f): y else if lit?(y, 1.0f): x 
-  else if lit?(x, 0.0f) or lit?(y, 0.0f): lit(0.0f)
+  else if lit?(x, 1.0): y else if lit?(y, 1.0): x 
+  else if lit?(x, 0.0) or lit?(y, 0.0): lit(0.0)
   else : binary("mul", x, y)
 public defn min (x:FloField, y:FloField) -> FloField : 
   if lit?(x) and lit?(y): lit(min(lit-value(x), lit-value(y)))
-  else if lit?(y) and lit-value(y) >= pos-inf-f: x
-  else if lit?(x) and lit-value(x) >= pos-inf-f: y
+  else if lit?(y) and lit-value(y) >= pos-inf-d: x
+  else if lit?(x) and lit-value(x) >= pos-inf-d: y
   else : binary("min", x, y)
 public defn max (x:FloField, y:FloField) -> FloField :
   if lit?(x) and lit?(y): lit(max(lit-value(x), lit-value(y)))
-  else if lit?(y) and lit-value(y) <= pos-inf-f: x
-  else if lit?(x) and lit-value(x) <= pos-inf-f: y
+  else if lit?(y) and lit-value(y) <= pos-inf-d: x
+  else if lit?(x) and lit-value(x) <= pos-inf-d: y
   else : binary("max", x, y)
 public defn divide (x:FloField, y:FloField) -> FloField : 
   if lit?(x) and lit?(y): lit(divide(lit-value(x), lit-value(y)))
-  else if lit?(y, 1.0f): x 
-  else if lit?(x, 0.0f): x
+  else if lit?(y, 1.0): x 
+  else if lit?(x, 0.0): x
   else : binary("div", x, y)
 public defn plus (x:FloField, y:FloField) -> FloField :
   if lit?(x) and lit?(y): lit(plus(lit-value(x), lit-value(y)))
-  else if lit?(x, 0.0f): y else if lit?(y, 0.0f): x
+  else if lit?(x, 0.0): y else if lit?(y, 0.0): x
   else if lit?(x) and op?(y, "add") and lit?(op-arg1(y)) : op-arg0(y) + lit(lit-value(x) + lit-value(op-arg1(y))) ;; add(lx, add(y, ly)) = add(y, lx + ly)
   else if lit?(x) and op?(y, "sub") and lit?(op-arg1(y)) : op-arg0(y) + lit(lit-value(x) - lit-value(op-arg1(y))) ;; add(lx, sub(y, ly)) = add(y, lx - ly)
   else if lit?(y) and op?(x, "add") and lit?(op-arg1(x)) : op-arg0(x) + lit(lit-value(op-arg1(x)) + lit-value(y)) ;; add(add(x, lx), ly) = add(x, lx + ly)
@@ -127,7 +125,7 @@ public defn plus (x:FloField, y:FloField) -> FloField :
   else : binary("add", x, y)
 public defn minus (x:FloField, y:FloField) -> FloField : 
   if lit?(x) and lit?(y): lit(minus(lit-value(x), lit-value(y)))
-  else if lit?(y, 0.0f): x
+  else if lit?(y, 0.0): x
   else if lit?(x) and op?(y, "add") and lit?(op-arg1(y)) : lit(lit-value(x) - lit-value(op-arg1(y))) - op-arg0(y) ;; sub(lx, add(y, ly)) = sub(lx - ly, y)
   else if lit?(x) and op?(y, "sub") and lit?(op-arg1(y)) : lit(lit-value(x) + lit-value(op-arg1(y))) - op-arg0(y) ;; sub(lx, sub(y, ly)) = sub(lx + ly, y)
   else if lit?(y) and op?(x, "add") and lit?(op-arg1(x)) : op-arg0(x) + lit(lit-value(op-arg1(x)) - lit-value(y)) ;; sub(add(x, lx), ly) = sub(x, lx - ly)
@@ -187,7 +185,7 @@ public defn Vec3Field (x:FloField, y:FloField, z:FloField) :
 defmethod equal? (a:Vec3Field, b:Vec3Field) -> True|False :
   x(a) == x(b) and y(a) == y(b) and z(a) == z(b) 
 
-public defn lit (v:V3f) -> Vec3Field :
+public defn lit (v:V3d) -> Vec3Field :
   Vec3Field(lit(x(v)), lit(y(v)), lit(z(v)))
 
 public defn Vec3Field (n:FloField) -> Vec3Field :
@@ -249,7 +247,7 @@ public defn times (s:FloField, v:Vec3Field) -> Vec3Field :
 public defn times (a:Vec3Field, b:Vec3Field) -> Vec3Field :
   Vec3Field(x(a) * x(b), y(a) * y(b), z(a) * z(b))
 
-public defn times (m:Mat44f, v:Vec3Field) -> Vec3Field :
+public defn times (m:Mat44d, v:Vec3Field) -> Vec3Field :
   val px = x(v) * lit(m[0,0]) + y(v) * lit(m[1,0]) + z(v) * lit(m[2,0]) + lit(m[3,0])
   val py = x(v) * lit(m[0,1]) + y(v) * lit(m[1,1]) + z(v) * lit(m[2,1]) + lit(m[3,1])
   val pz = x(v) * lit(m[0,2]) + y(v) * lit(m[1,2]) + z(v) * lit(m[2,2]) + lit(m[3,2])
