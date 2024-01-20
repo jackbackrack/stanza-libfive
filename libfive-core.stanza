@@ -30,8 +30,8 @@ defpackage libfive/core :
 val @doc-libfive = "## LIBFIVE -- distance fields"
 
 lostanza deftype libfive_interval :
-  lower : double
-  upper : double
+  lower : float
+  upper : float
 
 lostanza deftype libfive_region2 :
   X : libfive_interval
@@ -43,19 +43,19 @@ lostanza deftype libfive_region3 :
   Z : libfive_interval
 
 lostanza deftype libfive_vec2 :
-  x : double
-  y : double
+  x : float
+  y : float
 
 lostanza deftype libfive_vec3 :
-  x : double
-  y : double
-  z : double
+  x : float
+  y : float
+  z : float
 
 lostanza deftype libfive_vec4 :
-  x : double
-  y : double
-  z : double
-  w : double
+  x : float
+  y : float
+  z : float
+  w : float
 
 lostanza deftype libfive_tri :
   a : int
@@ -99,15 +99,15 @@ lostanza defn height (p:ref<LibfivePixels>) -> ref<Int> :
 extern memcpy: (ptr<byte>, ptr<byte>, int) -> ptr<byte>
 
 extern libfive_tree_delete: (ptr<?>) -> int
-extern libfive_tree_eval_d_spread: (ptr<?>, double, double, double) -> double
+extern libfive_tree_eval_d_spread: (ptr<?>, float, float, float) -> float
 ;; extern libfive_tree_bounds_star: (ptr<?>) -> ptr<libfive_region3>
 extern libfive_tree_print: (ptr<?>) -> ptr<byte>
 extern libfive_tree_save: (ptr<?>, ptr<byte>) -> int
-extern libfive_tree_save_mesh_spread: (ptr<?>, double, double, double, double, double, double, double, ptr<byte>) -> int
-extern libfive_tree_save_slice_spread: (ptr<?>, double, double, double, double, double, double, ptr<byte>) -> int
-extern libfive_tree_render_mesh_spread: (ptr<?>, double, double, double, double, double, double, double) -> ptr<libfive_mesh>
-extern libfive_tree_render_slice_spread: (ptr<?>, double, double, double, double, double, double) -> ptr<libfive_contours>
-extern libfive_tree_render_pixels_spread: (ptr<?>, double, double, double, double, double, double) -> ptr<libfive_pixels>
+extern libfive_tree_save_mesh_spread: (ptr<?>, float, float, float, float, float, float, float, ptr<byte>) -> int
+extern libfive_tree_save_slice_spread: (ptr<?>, float, float, float, float, float, float, ptr<byte>) -> int
+extern libfive_tree_render_mesh_spread: (ptr<?>, float, float, float, float, float, float, float) -> ptr<libfive_mesh>
+extern libfive_tree_render_slice_spread: (ptr<?>, float, float, float, float, float, float) -> ptr<libfive_contours>
+extern libfive_tree_render_pixels_spread: (ptr<?>, float, float, float, float, float, float) -> ptr<libfive_pixels>
 extern libfive_contours_delete: (ptr<libfive_contours>) -> int
 extern libfive_mesh_delete: (ptr<libfive_mesh>) -> int
 extern libfive_pixels_delete: (ptr<libfive_pixels>) -> int
@@ -139,7 +139,7 @@ public lostanza defn tree-delete (t:ref<Tree>) -> ref<False> :
   return false
 
 public lostanza defn tree-eval-d (t:ref<Tree>, p:ref<V3d>) -> ref<Double> :
-  val res = call-c libfive_tree_eval_d_spread(t.value, x(p).value, y(p).value, z(p).value)
+  val res = call-c libfive_tree_eval_d_spread(t.value, x(p).value as float, y(p).value as float, z(p).value as float)
   return new Double{res}
 
 public lostanza defn tree-print (t:ref<Tree>) -> ref<String> :
@@ -151,11 +151,17 @@ public lostanza defn tree-save (t:ref<Tree>, filename:ref<String>) -> ref<False>
   return false
 
 public lostanza defn tree-save-mesh (t:ref<Tree>, filename:ref<String>, box:ref<Box3d>, res:ref<Double>) -> ref<False> :
-  call-c libfive_tree_save_mesh_spread(t.value, x(lo(box)).value, x(hi(box)).value, y(lo(box)).value, y(hi(box)).value, z(lo(box)).value, z(hi(box)).value, res.value, addr!(filename.chars))
+  call-c libfive_tree_save_mesh_spread(t.value,
+    x(lo(box)).value as float, x(hi(box)).value as float,
+    y(lo(box)).value as float, y(hi(box)).value as float,
+    z(lo(box)).value as float, z(hi(box)).value as float, res.value as float, addr!(filename.chars))
   return false
 
 public lostanza defn tree-save-slice (t:ref<Tree>, filename:ref<String>, box:ref<Box3d>, res:ref<Double>) -> ref<False> :
-  call-c libfive_tree_save_slice_spread(t.value, x(lo(box)).value, x(hi(box)).value, y(lo(box)).value, y(hi(box)).value, z(lo(box)).value, res.value, addr!(filename.chars))
+  call-c libfive_tree_save_slice_spread(t.value,
+    x(lo(box)).value as float, x(hi(box)).value as float,
+    y(lo(box)).value as float, y(hi(box)).value as float,
+    z(lo(box)).value as float, res.value as float, addr!(filename.chars))
   return false
 
 public lostanza defn get-vert-value (m:ref<LibfiveMesh>, i:ref<Int>) -> ref<V3d> :
@@ -183,7 +189,10 @@ defn to-mesh (rm:LibfiveMesh) -> Mesh :
   gc(Mesh(verts, tris))
 
 public lostanza defn tree-render-mesh (t:ref<Tree>, box:ref<Box3d>, res:ref<Double>) -> ref<Mesh> :
-  val out = call-c libfive_tree_render_mesh_spread(t.value, x(lo(box)).value, x(hi(box)).value, y(lo(box)).value, y(hi(box)).value, z(lo(box)).value, z(hi(box)).value, res.value)
+  val out = call-c libfive_tree_render_mesh_spread(t.value,
+    x(lo(box)).value as float, x(hi(box)).value as float,
+    y(lo(box)).value as float, y(hi(box)).value as float,
+    z(lo(box)).value as float, z(hi(box)).value as float, res.value as float)
   val c-mesh = new LibfiveMesh{out}
   val mesh = to-mesh(c-mesh)
   call-c libfive_mesh_delete(out)
@@ -204,7 +213,10 @@ defn to-pixels (p:LibfivePixels, res:Double) -> Pixels :
   Pixels(V3i(width, height, 1), 1.0 / res, data)
 
 public lostanza defn tree-render-pixels (t:ref<Tree>, box:ref<Box3d>, res:ref<Double>) -> ref<Pixels> :
-  val out = call-c libfive_tree_render_pixels_spread(t.value, x(lo(box)).value, x(hi(box)).value, y(lo(box)).value, y(hi(box)).value,  z(lo(box)).value, res.value)
+  val out = call-c libfive_tree_render_pixels_spread(t.value,
+    x(lo(box)).value as float, x(hi(box)).value as float,
+    y(lo(box)).value as float, y(hi(box)).value as float,
+    z(lo(box)).value as float, res.value as float)
   val c-pixels = new LibfivePixels{out}
   val pixels = to-pixels(c-pixels, res)
   call-c libfive_pixels_delete(out)
@@ -231,7 +243,10 @@ defn to-polygon (cs:LibfiveContours) -> Polygon :
   Polygon(to-tuple $ contours)
 
 public lostanza defn tree-render-slice (t:ref<Tree>, box:ref<Box3d>, res:ref<Double>) -> ref<Polygon> :
-  val out = call-c libfive_tree_render_slice_spread(t.value, x(lo(box)).value, x(hi(box)).value, y(lo(box)).value, y(hi(box)).value, z(lo(box)).value, res.value)
+  val out = call-c libfive_tree_render_slice_spread(t.value,
+    x(lo(box)).value as float, x(hi(box)).value as float,
+    y(lo(box)).value as float, y(hi(box)).value as float,
+    z(lo(box)).value as float, res.value as float)
   val slice = new LibfiveContours{out}
   val poly = to-polygon(slice)
   call-c libfive_contours_delete(out)

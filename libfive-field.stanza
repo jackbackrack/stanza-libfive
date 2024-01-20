@@ -10,7 +10,7 @@ defpackage libfive/field :
 extern libfive_tree_x: () -> ptr<?>
 extern libfive_tree_y: () -> ptr<?>
 extern libfive_tree_z: () -> ptr<?>
-extern libfive_tree_const: (double) -> ptr<?>
+extern libfive_tree_const: (float) -> ptr<?>
 extern libfive_tree_unary: (int, ptr<?>) -> ptr<?>
 extern libfive_tree_binary: (int, ptr<?>, ptr<?>) -> ptr<?>
 extern libfive_opcode_enum: (ptr<?>) -> int
@@ -81,7 +81,7 @@ public lostanza defn fab-y () -> ref<FloField> :
 public lostanza defn fab-z () -> ref<FloField> :
   return FloFieldOp(Tree(call-c libfive_tree_z()), String("Z"), List())
 public lostanza defn lit (f:ref<Double>) -> ref<FloField> :
-  return FloFieldLit(Tree(call-c libfive_tree_const(f.value)), f)
+  return FloFieldLit(Tree(call-c libfive_tree_const(f.value as float)), f)
 public lostanza defn opcode (name:ref<String>) -> ref<Int> :
   return new Int{call-c libfive_opcode_enum(addr!(name.chars))}
 public lostanza defn unary (op:ref<String>, t:ref<FloField>) -> ref<FloField> :
