@@ -21,10 +21,10 @@ defpackage libfive/lib :
 public defn rect (w:Double, h:Double) -> Shape :
   rect(dim-min(w), dim-min(h), dim-max(w), dim-max(h))
 
-public defn rect (dims:V2d) -> Shape :
+public defn rect (dims:Vec2) -> Shape :
   rect(x(dims), y(dims))
 
-public defn rect (v0:V2d, v1:V2d, d:Double) -> Shape :
+public defn rect (v0:Vec2, v1:Vec2, d:Double) -> Shape :
   val v = v1 - v0
   val a = atan2(y(v),x(v))
   mov(xyz(0.5 * (v0 + v1)), rot-z(radians-to-degrees(a), rect(magnitude(v) + d, d)))
@@ -46,38 +46,38 @@ public defn cube (d:Double) -> Shape :
 public defn cube (xy:Double, z:Double) -> Shape :
   cube(xy, xy, z)
 
-public defn cube (v:V3d) -> Shape :
+public defn cube (v:Vec3) -> Shape :
   cube(x(v), y(v), z(v))
 
-;; public defn box (dims:V3d) -> Shape :
+;; public defn box (dims:Vec3) -> Shape :
 ;;   defn fab (p) :
 ;;     val d = abs(p) - lit(0.5 * dims)
 ;;     min(max(x(d),max(y(d),z(d))),lit(0.0)) + len(max(d,lit(0.0)))  
 ;;   Shape(fab, dims-to-box(dims))
 
-public defn box (b:Box3d) -> Shape :
+public defn box (b:Box3) -> Shape :
   cube(x(lo(b)), y(lo(b)), z(lo(b)), x(hi(b)), y(hi(b)), z(hi(b)))
 
 public defn cylinder (d:Double, h:Double) -> Shape :
   extrude(h, circle(d))
 
 ;; TODO: BROKEN
-;; public defn box (dims:V3d) -> Shape :
+;; public defn box (dims:Vec3) -> Shape :
 ;;   defn fab (p) : len(max(abs(p) - lit(0.5 * dims), lit(0.0)))
 ;;   Shape(fab, dims-to-box(dims))
 
 ;; TODO: BROKEN
-;; public defn round-box (dims:V3d, r:Double) -> Shape :
+;; public defn round-box (dims:Vec3, r:Double) -> Shape :
 ;;   offset(box(dims), r)
 
-;; public defn capsule (a:V3d, b:V3d, d:Double) -> Shape :
+;; public defn capsule (a:Vec3, b:Vec3, d:Double) -> Shape :
 ;;   val r  = 0.5 * d
 ;;   defn fab (p) :
 ;;     val pa = p - lit(a)
 ;;     val ba = b - a
 ;;     val h  = clamp(dot(pa, lit(ba)) / lit(dot(ba, ba)), lit(0.0), lit(1.0))
 ;;     len(pa - h * lit(ba)) - lit(r)
-;;   Shape(fab, fatten(Box3d(a, a) | Box3d(b, b), r))
+;;   Shape(fab, fatten(Box3(a, a) | Box3(b, b), r))
 
 public defn capsule3 (d:Double, h:Double) -> Shape :
   val r = 0.5 * h
@@ -87,13 +87,13 @@ public defn capsule2 (d:Double, w:Double) -> Shape :
   val r = 0.5 * w
   rect(w, d) | mov-x(r, circle(d)) | mov-x((- r), circle(d))
 
-public defn capsule (a:V3d, b:V3d, d:Double) -> Shape :
+public defn capsule (a:Vec3, b:Vec3, d:Double) -> Shape :
   pose-to-points(a, b) $ capsule3(d, magnitude(b - a))
 
-public defn capsule (a:V2d, b:V2d, d:Double) -> Shape :
+public defn capsule (a:Vec2, b:Vec2, d:Double) -> Shape :
   pose-to-points(a, b) $ capsule2(d, magnitude(b - a))
 
-;; public defn capsule (a:V3d, b:V3d, d:Double) -> Shape :
+;; public defn capsule (a:Vec3, b:Vec3, d:Double) -> Shape :
 ;;   val r  = 0.5 * d
 ;;   defn fab (p) :
 ;;     val pa = p - lit(a)
@@ -101,28 +101,28 @@ public defn capsule (a:V2d, b:V2d, d:Double) -> Shape :
 ;;     val h  = clamp(dot(pa, lit(ba)) / lit(dot(ba, ba)), lit(0.0), lit(1.0))
 ;;     len(pa - h * lit(ba)) - lit(r)
 ;;     ;; len(pa - h * lit(ba)) - lit(r)
-;;   Shape(fab, fatten(Box3d(a, a) | Box3d(b, b), xyz(r)))
+;;   Shape(fab, fatten(Box3(a, a) | Box3(b, b), xyz(r)))
 
-;; public defn capsule2 (a:V3d, b:V3d, d:Double) -> Shape :
+;; public defn capsule2 (a:Vec3, b:Vec3, d:Double) -> Shape :
 ;;   val r  = 0.5 * d
 ;;   defn fab (p) :
 ;;     val pa = xy(p) - lit(a)
 ;;     val ba = b - a
 ;;     val h  = clamp(dot(pa, lit(ba)) / lit(dot(ba, ba)), lit(0.0), lit(1.0))
 ;;     len(pa - h * lit(ba)) - lit(r)
-;;   Shape(fab, fatten(Box3d(a, a) | Box3d(b, b), r))
+;;   Shape(fab, fatten(Box3(a, a) | Box3(b, b), r))
 
 public defn cone (d:Double, h:Double) -> Shape :
   Shape(taper-xy-z(h, 1.0, 0.0, cylinder(d, h)),
-        dims-to-box(V3d(d, d, h)))
+        dims-to-box(Vec3(d, d, h)))
 
 public defn pyramid (d:Double, h:Double) -> Shape :
   Shape(taper-xy-z(h, 1.0, 0.0, extrude(h, rect(d, d))),
-        dims-to-box(V3d(d, d, h)))
+        dims-to-box(Vec3(d, d, h)))
 
 public defn torus (D:Double, d:Double) -> Shape :
   Shape(fn (p): len(Vec2Field(lit(D * 0.5) - len(xy(p)), z(p))) - lit(d * 0.5),
-        dims-to-box(V3d(D + d, D + d, d)))
+        dims-to-box(Vec3(D + d, D + d, d)))
 
 public defn to-shape (m:Mesh) -> Shape :
   val verts = vertices(m)
@@ -132,52 +132,52 @@ public defn to-shape (m:Mesh) -> Shape :
 public defn to-shape (p:Polygon) -> Shape :
   to-shape(triangulate(p))
 
-public defn triangle (a:V3d, b:V3d, c:V3d) -> Shape :
+public defn triangle (a:Vec3, b:Vec3, c:Vec3) -> Shape :
   convex([a, b, c])
 
 defn rect (xmin:Double, ymin:Double, xmax:Double, ymax:Double) -> Shape :
-  val b = Box3d(V3d(xmin, ymin, neg-inf-d), V3d(xmax, ymax, pos-inf-d))
+  val b = Box3(Vec3(xmin, ymin, neg-inf-d), Vec3(xmax, ymax, pos-inf-d))
   Shape(fn (p): max(max(lit(xmin) - x(p), x(p) - lit(xmax)), max(lit(ymin) - y(p), y(p) - lit(ymax))),
-        Box3d(V3d(xmin, ymin, neg-inf-d), V3d(xmax, ymax, pos-inf-d)))
+        Box3(Vec3(xmin, ymin, neg-inf-d), Vec3(xmax, ymax, pos-inf-d)))
 
-public defn rect2 (box:Box2d) :
+public defn rect2 (box:Box2) :
   val dims = dims(box)
   mov(xyz(center(box)), rect(x(dims), y(dims)))
 
 public defn circle (d:Double) -> Shape :
   val r = d * 0.5
-  Shape(fn (p): len(xy(p)) - lit(r), Box3d(V3d((- r), (- r), neg-inf-d), V3d(r, r, pos-inf-d)))
+  Shape(fn (p): len(xy(p)) - lit(r), Box3(Vec3((- r), (- r), neg-inf-d), Vec3(r, r, pos-inf-d)))
 
 ;; public defn circle (x:FloField, y:FloField, r:FloField) -> FloField :
 ;;   mov(x, y, {circle(r)})
 
 public defn sphere (d:Double) -> Shape :
   val r = d * 0.5
-  Shape(fn (p): len(p) - lit(r), Box3d(V3d((- r), (- r), (- r)), V3d(r, r, r)))
+  Shape(fn (p): len(p) - lit(r), Box3(Vec3((- r), (- r), (- r)), Vec3(r, r, r)))
 
 ;; public defn sphere (x:FloField, y:FloField, z:FloField, r:FloField) -> FloField :
 ;;   mov(x, y, z, {circle(r)})
 
-defn bounds-from-normal (n:V3d) -> Box3d :
+defn bounds-from-normal (n:Vec3) -> Box3 :
   let loop (i:Int = 0) :
     if i < 3 :
-      if n == V3d-unit(i) :
-        Box3d(set-elt(xyz(neg-inf-d), i, 0.0), xyz(pos-inf-d))
-      else if n == -1.0 * V3d-unit(i) :
-        Box3d(xyz(neg-inf-d), set-elt(xyz(pos-inf-d), i, 0.0))
+      if n == Vec3-unit(i) :
+        Box3(set-elt(xyz(neg-inf-d), i, 0.0), xyz(pos-inf-d))
+      else if n == -1.0 * Vec3-unit(i) :
+        Box3(xyz(neg-inf-d), set-elt(xyz(pos-inf-d), i, 0.0))
       else :
         loop(i + 1)
     else :
-      pos-inf-box3d()
+      pos-inf-box3()
 
-public defn halfspace (n:V3d) -> Shape :
+public defn halfspace (n:Vec3) -> Shape :
   Shape(fn (p): dot(lit(n), p), bounds-from-normal(n))
 
 public defn trim (s:Shape, p:Plane) -> Shape :
   val res = intersect-using-mat-a(s, mov(center(p), halfspace(normal(p))))
   Shape(fabber(res), mat(s), bounds(s), state(s))
 
-public defn cylinder (a:V3d, b:V3d, d:Double) -> Shape :
+public defn cylinder (a:Vec3, b:Vec3, d:Double) -> Shape :
   pose-to-points(a, b) $ cylinder(d, magnitude(b - a))
 
 public defn bulk-rem (p:Poseable, c:Shape) :
@@ -186,33 +186,33 @@ public defn bulk-rem (p:Poseable, c:Shape) :
 public defn bulk-rem (shapes:Tuple<Shape>, c:Shape) :
   bulk-rem(group $ shapes, c)
 
-public defn trim (s:Shape, n:V3d) -> Shape :
+public defn trim (s:Shape, n:Vec3) -> Shape :
   ;; val res = intersect-using-mat-a(s, halfspace(n))
   val res = s & halfspace(n)
   Shape(fabber(res), mat(s), bounds(s), state(s))
 
-public defn trim3 (s:Shape, trim:(Shape, V3d) -> Shape, p:V3d, n:V3d, offset:Double) -> Shape :
+public defn trim3 (s:Shape, trim:(Shape, Vec3) -> Shape, p:Vec3, n:Vec3, offset:Double) -> Shape :
   val del = p + offset * n
   val res = mov(del) $ trim(mov(-1.0 * del) $ s, n)
   res
 
-public defn trim3 (s:Shape, p:V3d, n:V3d, offset:Double) -> Shape :
+public defn trim3 (s:Shape, p:Vec3, n:Vec3, offset:Double) -> Shape :
   trim3(s, trim, p, n, offset)
 
-public defn trim3 (s:Shape, trim:(Shape, V3d) -> Shape, p:V3d, a:V3d, b:V3d, offset:Double) -> Shape :
+public defn trim3 (s:Shape, trim:(Shape, Vec3) -> Shape, p:Vec3, a:Vec3, b:Vec3, offset:Double) -> Shape :
   val n = bisection-normal(normalize(a), normalize(b))
   trim3(s, trim, p, -1.0 * n, offset)
 
-public defn trim3 (s:Shape, p:V3d, a:V3d, b:V3d, offset:Double) -> Shape :
+public defn trim3 (s:Shape, p:Vec3, a:Vec3, b:Vec3, offset:Double) -> Shape :
   trim3(s, trim, p, a, b, offset)
   
 public defn lift (t:Double, s2:Shape) -> Shape :
   val s = extrude(t, s2)
   ;; val c = center(bounds(s))
-  ;; set-points(s, [c, c + V3d(0.0, 0.0, t)])
+  ;; set-points(s, [c, c + Vec3(0.0, 0.0, t)])
   s
 
-public defn plate (d:V2d, t:Double) :
+public defn plate (d:Vec2, t:Double) :
   lift(t, rect(x(d), y(d)))
 
 public defn x-beam (e:Poseable) :
@@ -224,62 +224,62 @@ public defn t-beam (e:Poseable) :
 public defn l-beam (e:Poseable) :
   group $ align-max-x $ align-min-z $ [e reflect-xz(e)]
 
-public defn frame (d:V3d, t:Double) :
-  val yb = reflect-yz $ plate(V2d(x(d), z(d)), t)
-  val xb = reflect-xz $ plate(V2d(z(d), y(d)), t)
+public defn frame (d:Vec3, t:Double) :
+  val yb = reflect-yz $ plate(Vec2(x(d), z(d)), t)
+  val xb = reflect-xz $ plate(Vec2(z(d), y(d)), t)
   cat-all $ [stack-y(y(d)) $ glue $ [ yb yb ],
              stack-x(x(d)) $ glue $ [ xb xb ]]
 
-public defn flat-frame (d:V2d, o:Double, t:Double) :
-  val yb = plate(V2d(x(d), o), t)
-  val xb = plate(V2d(o, y(d)), t)
+public defn flat-frame (d:Vec2, o:Double, t:Double) :
+  val yb = plate(Vec2(x(d), o), t)
+  val xb = plate(Vec2(o, y(d)), t)
   group $ cat-all $ [stack-y(y(d)) $ glue $ [ yb yb ],
                      stack-x(x(d)) $ glue $ [ xb xb ]]
 
-public defn bloom (d:V2d, t:Double) :
+public defn bloom (d:Vec2, t:Double) :
   val xb  = reflect-yz $ x-beam(plate(d, t))
   val tbx = t-beam(plate(d, t))
   val tby = reflect-xy $ t-beam(plate(d, t))
   shapes $ group $ align-min-z $ [xb tbx tby]
 
-public defn dividers (d:V3d, t:Double, n:V2i) :
-  val wall  = reflect-xz $ plate(V2d(z(d), y(d)), t)
-  val shelf = reflect-yz $ plate(V2d(x(d), z(d)), t)
+public defn dividers (d:Vec3, t:Double, n:Vec2i) :
+  val wall  = reflect-xz $ plate(Vec2(z(d), y(d)), t)
+  val shelf = reflect-yz $ plate(Vec2(x(d), z(d)), t)
   cat-all $ [stack-x(x(d)) $ glue $ seq({ wall },  0 to x(n)),
              stack-y(y(d)) $ glue $ seq({ shelf }, 0 to y(n))]
 
-public defn bookshelf (d:V3d, t:Double, n:V2i) :
+public defn bookshelf (d:Vec3, t:Double, n:Vec2i) :
   cat-all $ [dividers(d, t, n), stack-z(z(d), [plate(xy(d), t), Glue(1.0)])]
 
-public defn mounting-holes (inner:V2d, t:Double, hd:Double) -> Assembly :
+public defn mounting-holes (inner:Vec2, t:Double, hd:Double) -> Assembly :
   group $ space-corners(inner - xy(hd), cylinder(hd, t * 2.0))
 
-public defn mounting-holes-centers (inner:V2d, t:Double, hd:Double) -> Assembly :
+public defn mounting-holes-centers (inner:Vec2, t:Double, hd:Double) -> Assembly :
   group $ space-corners(inner, cylinder(hd, t * 2.0))
 
-public defn mounting-plate (outer:V2d, inner:V2d, t:Double, hd:Double) -> Shape :
+public defn mounting-plate (outer:Vec2, inner:Vec2, t:Double, hd:Double) -> Shape :
   rem(plate(outer, t), union $ shapes $ mounting-holes(inner, t, hd))
 
-public defn rounded-mounting-plate (outer:V2d, inner:V2d, d:Double, t:Double, hd:Double) -> Shape :
+public defn rounded-mounting-plate (outer:Vec2, inner:Vec2, d:Double, t:Double, hd:Double) -> Shape :
   rem(extrude(t, rounded-rect(outer, d)), union $ shapes $ mounting-holes(inner, t, hd))
 
-public defn space-corners (d:V2d, s:Poseable) -> Seqable<Poseable> :
+public defn space-corners (d:Vec2, s:Poseable) -> Seqable<Poseable> :
   val x-pair = group $ space-x([x(d)], [s s])
   space-y([y(d)], [x-pair x-pair])
 
-public defn stack-corners (d:V2d, s:Poseable) -> Seqable<Poseable> :
+public defn stack-corners (d:Vec2, s:Poseable) -> Seqable<Poseable> :
   val x-pair = group $ stack-x(x(d), glue $ [s s])
   stack-y(y(d), glue $ [x-pair x-pair])
 
-public defn corners (d:V2d, s:Poseable) -> Seqable<Poseable> :
+public defn corners (d:Vec2, s:Poseable) -> Seqable<Poseable> :
   val x-pair = group $ stack-x(x(d), glue $ [s s])
   stack-y(y(d), glue $ [x-pair x-pair])
 
-public defn rot-corners (d:V2d, s:Poseable) -> Seqable<Poseable> :
+public defn rot-corners (d:Vec2, s:Poseable) -> Seqable<Poseable> :
   val x-pair = group $ stack-x(x(d), glue $ [s reflect-x(s)])
   stack-y(y(d), glue $ [x-pair reflect-y(x-pair)])
 
-public defn rounded-rect (od:V2d, d:Double) :
+public defn rounded-rect (od:Vec2, d:Double) :
   val id = od - xy(d)
   val caps = union $ shapes $ group $ space-corners(id, circle(d))
   val yr = rect(x(id), y(od))
@@ -287,57 +287,57 @@ public defn rounded-rect (od:V2d, d:Double) :
   union $ [xr, yr, caps]
 
 public defn corner (d:Double, t:Double) :
-  val c = plate(V2d(d, d), t)
+  val c = plate(Vec2(d, d), t)
   align-min-z $ align-min-y $ align-min-x $ [c, reflect-xz $ c, reflect-yz $ c]
 
-public defn bin (d:V3d, t:Double, o:Double) :
-  group $ align-min-z $ cat(frame(d, t), [plate(xy(d) + 2.0 * V2d(o, o), t)])
+public defn bin (d:Vec3, t:Double, o:Double) :
+  group $ align-min-z $ cat(frame(d, t), [plate(xy(d) + 2.0 * Vec2(o, o), t)])
 
-public defn drawer (d:V3d, t:Double) :
+public defn drawer (d:Vec3, t:Double) :
   bin(d, t, 0.0)
 
 public var *drawer-gap*:Double = 1.0 / 16.0
 
-public defn drawers (d:V3d, t:Double, drawers:Tuple<((V3d, Double) -> Poseable)>) :
+public defn drawers (d:Vec3, t:Double, drawers:Tuple<((Vec3, Double) -> Poseable)>) :
   val st  = t + *drawer-gap*
   val n   = length(drawers)
   val dzd = (z(d) - (to-double(n + 1) * st)) / to-double(n)
-  val dd  = V3d(x(d) - 2.0 * st, y(d) - 1.0 * st, dzd)
+  val dd  = Vec3(x(d) - 2.0 * st, y(d) - 1.0 * st, dzd)
   group $ stack-z(z(d) - 2.0 * st, glue $ seq(fn (f) : f(dd, t), drawers))
 
-public defn pulls (d:V3d, t:Double, n:Int) :
-  val tab = rem(plate(V2d(x(d), y(d) + t), t), 
-                mov-y(0.5 * t) $ plate(0.25 * V2d(x(d), y(d)), 2.0 * t))
+public defn pulls (d:Vec3, t:Double, n:Int) :
+  val tab = rem(plate(Vec2(x(d), y(d) + t), t), 
+                mov-y(0.5 * t) $ plate(0.25 * Vec2(x(d), y(d)), 2.0 * t))
   group $ stack-z(z(d) - t) $ glue-evenly $ repeatedly({ tab }, n)
 
-public defn face-plate (d:V2d, o:Double, bolt-d:Double, t:Double) :
+public defn face-plate (d:Vec2, o:Double, bolt-d:Double, t:Double) :
   val board = lift(t, rounded-rect(d, 2.0 * o))
   val hole  = cylinder(bolt-d, 2.0 * t)
   val holes = shapes $ group $ space-corners(d, hole)
   [ rem(board, union $ holes) ]
 
-public defn chest (d:V3d, t:Double, gen-drawers:Seqable<((V3d, Double) -> Poseable)>) :
+public defn chest (d:Vec3, t:Double, gen-drawers:Seqable<((Vec3, Double) -> Poseable)>) :
   val ds = to-tuple $ gen-drawers
-  val bs = group $ bookshelf(V3d(x(d), z(d), y(d)), t, V2i(2, length(ds) + 1))
+  val bs = group $ bookshelf(Vec3(x(d), z(d), y(d)), t, Vec2i(2, length(ds) + 1))
   group $ align-max-y $ [reflect-yz $ bs, drawers(d, t, ds)]
 
-public defn chest-pulls (d:V3d, t:Double, gen-drawers:Seqable<((V3d, Double) -> Poseable)>) :
+public defn chest-pulls (d:Vec3, t:Double, gen-drawers:Seqable<((Vec3, Double) -> Poseable)>) :
   val ds  = to-tuple $ gen-drawers
   val cab = chest(d, t, ds)
-  val tabs = pulls(V3d(2.0, 1.0, z(d)), t, length(ds))
+  val tabs = pulls(Vec3(2.0, 1.0, z(d)), t, length(ds))
   mov-y(0.5 * (y(dims(bounds(tabs))) - t)) $ group $ stack-meld-y(t) $ [ cab tabs ]
 
-public defn hook (hd:V2d, sd:V2d, t:Double) :
+public defn hook (hd:Vec2, sd:Vec2, t:Double) :
   val h = plate(hd, t)
   val s = mov-x(-0.5 * t) $ plate(sd, 2.0 * t)
   rem $ align-max-y $ [h s]
 
-public defn hook-bar (d:V2d, n:Int, h:Shape, t:Double) :
+public defn hook-bar (d:Vec2, n:Int, h:Shape, t:Double) :
   val b = plate(d, t)
   val hs = stack-x(x(d)) $ glue $ repeatedly({ reflect-xz $ h }, n)
   group $ align-min-z $ cat-all $ [[b], hs]
 
 public defn hook-row (xd:Double, t:Double, n:Int) :
-  val hook  = reflect-xy $ reflect-yz $ hook(V2d(1.0 + t, 1.0), V2d(0.375, 0.5), t)
+  val hook  = reflect-xy $ reflect-yz $ hook(Vec2(1.0 + t, 1.0), Vec2(0.375, 0.5), t)
   group $ stack-x(xd) $ glue-all $ repeatedly({ hook }, n)
 

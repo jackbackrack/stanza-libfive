@@ -185,7 +185,7 @@ public defn Vec3Field (x:FloField, y:FloField, z:FloField) :
 defmethod equal? (a:Vec3Field, b:Vec3Field) -> True|False :
   x(a) == x(b) and y(a) == y(b) and z(a) == z(b) 
 
-public defn lit (v:V3d) -> Vec3Field :
+public defn lit (v:Vec3) -> Vec3Field :
   Vec3Field(lit(x(v)), lit(y(v)), lit(z(v)))
 
 public defn Vec3Field (n:FloField) -> Vec3Field :
@@ -247,7 +247,7 @@ public defn times (s:FloField, v:Vec3Field) -> Vec3Field :
 public defn times (a:Vec3Field, b:Vec3Field) -> Vec3Field :
   Vec3Field(x(a) * x(b), y(a) * y(b), z(a) * z(b))
 
-public defn times (m:Mat44d, v:Vec3Field) -> Vec3Field :
+public defn times (m:Mat4, v:Vec3Field) -> Vec3Field :
   val px = x(v) * lit(m[0,0]) + y(v) * lit(m[1,0]) + z(v) * lit(m[2,0]) + lit(m[3,0])
   val py = x(v) * lit(m[0,1]) + y(v) * lit(m[1,1]) + z(v) * lit(m[2,1]) + lit(m[3,1])
   val pz = x(v) * lit(m[0,2]) + y(v) * lit(m[1,2]) + z(v) * lit(m[2,2]) + lit(m[3,2])
